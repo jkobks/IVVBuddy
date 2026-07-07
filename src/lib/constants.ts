@@ -21,7 +21,7 @@ export const MAX_INTERVENTIONS = 3           // per task
 export const INTERVENTION_COOLDOWN_MS = 0
 export const BUBBLE_DISMISS_MS = 8_000
 export const QUICK_DECISION_THRESHOLD_MS = 45_000
-export const STAGNATION_THRESHOLD = 0.8
+export const STAGNATION_THRESHOLD = 0.5
 export const TOP1_CONSECUTIVE_THRESHOLD = 2
 export const SINGLE_DOMAIN_THRESHOLD = 3
 

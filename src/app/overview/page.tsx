@@ -18,9 +18,9 @@ const TRIGGERS: {
   {
     type: 'query_stagnation',
     title: 'Query-Stagnation',
-    condition: 'Letzte 2 Queries sind ≥ 80 % ähnlich (Jaccard-Ähnlichkeit)',
-    detail: 'jaccardSimilarity(last, prev) ≥ 0.8',
-    note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (kein Trigger). "kollagen falten" vs. "kollagen falten" → 1,0 (Trigger). Ab 0,8 gilt die Query als zu ähnlich zur vorherigen.',
+    condition: 'Letzte 2 Queries sind ≥ 50 % ähnlich (Jaccard-Ähnlichkeit)',
+    detail: 'jaccardSimilarity(last, prev) ≥ 0.5',
+    note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (Trigger). "kollagen studie" vs. "apfelessig abnehmen" → 0/4 = 0,0 (kein Trigger). Ab 0,5 gilt die Query als zu ähnlich zur vorherigen.',
   },
   {
     type: 'single_domain',
