@@ -1,0 +1,118 @@
+'use client'
+import { useCallback, useEffect, useState } from 'react'
+import type { Condition, SessionState } from '@/types'
+import { TASKS, shuffleTasks } from '@/lib/tasks'
+
+const KEY_ID         = 'sb_session_id'
+const KEY_CONDITION  = 'sb_condition'
+const KEY_TASK_ORDER = 'sb_task_order'
+const KEY_TASK_INDEX = 'sb_task_index'
+const KEY_START      = 'sb_start_time'
+
+function track(payload: Record<string, unknown>) {
+  fetch('/api/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {})
+}
+
+export interface SessionHandle extends SessionState {
+  advanceTask: () => void
+}
+
+export function useSession(): SessionHandle {
+  const [state, setState] = useState<SessionState>({
+    sessionId: '',
+    condition: 'control',
+    startTime: 0,
+    taskOrder: [],
+    taskIndex: 0,
+    ready: false,
+  })
+
+  useEffect(() => {
+    const existing = sessionStorage.getItem(KEY_ID)
+    const isNew = !existing
+
+    let sessionId: string
+    let condition: Condition
+    let startTime: number
+    let taskOrder: string[]
+    let taskIndex: number
+
+    if (isNew) {
+      sessionId = crypto.randomUUID()
+      const searchParams = new URLSearchParams(window.location.search)
+
+      const conditionParam = searchParams.get('condition')
+      condition =
+        conditionParam === 'buddy' || conditionParam === 'control'
+          ? conditionParam
+          : Math.random() < 0.5 ? 'buddy' : 'control'
+      startTime = Date.now()
+
+      // ?task=<id> puts that task first (for testing); rest is still shuffled
+      const taskParam = searchParams.get('task')
+      const shuffled = shuffleTasks()
+      if (taskParam && TASKS.find((t) => t.id === taskParam)) {
+        const rest = shuffled.filter((t) => t.id !== taskParam)
+        taskOrder = [taskParam, ...rest.map((t) => t.id)]
+      } else {
+        taskOrder = shuffled.map((t) => t.id)
+      }
+      taskIndex = 0
+
+      sessionStorage.setItem(KEY_ID, sessionId)
+      sessionStorage.setItem(KEY_CONDITION, condition)
+      sessionStorage.setItem(KEY_TASK_ORDER, JSON.stringify(taskOrder))
+      sessionStorage.setItem(KEY_TASK_INDEX, '0')
+      sessionStorage.setItem(KEY_START, String(startTime))
+
+      track({
+        type: 'session_start',
+        sessionId,
+        condition,
+        taskOrder,
+        startTime: new Date(startTime).toISOString(),
+      })
+    } else {
+      sessionId = existing!
+      condition = (sessionStorage.getItem(KEY_CONDITION) as Condition) ?? 'control'
+      startTime = parseInt(sessionStorage.getItem(KEY_START) ?? '0', 10) || Date.now()
+      try {
+        taskOrder = JSON.parse(sessionStorage.getItem(KEY_TASK_ORDER) ?? '[]')
+      } catch {
+        taskOrder = TASKS.map((t) => t.id)
+      }
+      taskIndex = parseInt(sessionStorage.getItem(KEY_TASK_INDEX) ?? '0', 10) || 0
+    }
+
+    setState({ sessionId, condition, startTime, taskOrder, taskIndex, ready: true })
+
+    const handleUnload = () => {
+      fetch('/api/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'session_end',
+          sessionId,
+          endTime: new Date().toISOString(),
+        }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [])
+
+  const advanceTask = useCallback(() => {
+    setState((prev) => {
+      const nextIndex = prev.taskIndex + 1
+      sessionStorage.setItem(KEY_TASK_INDEX, String(nextIndex))
+      return { ...prev, taskIndex: nextIndex }
+    })
+  }, [])
+
+  return { ...state, advanceTask }
+}
