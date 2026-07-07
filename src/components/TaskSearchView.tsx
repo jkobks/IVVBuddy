@@ -20,39 +20,22 @@ interface Props {
   sessionId: string
   condition: Condition
   isLastTask: boolean
-  // Behavioral history lives in page.tsx and accumulates across all tasks.
-  // key={taskIndex} on this component resets the search UI and trigger counters,
-  // while the history itself carries over so the Buddy sees the full session.
-  queryHistory: string[]
-  setQueryHistory: React.Dispatch<React.SetStateAction<string[]>>
-  clickHistory: ClickRecord[]
-  setClickHistory: React.Dispatch<React.SetStateAction<ClickRecord[]>>
-  bounceCount: number
-  setBounceCount: React.Dispatch<React.SetStateAction<number>>
-  bounceCountRef: React.MutableRefObject<number>
   onTaskComplete: () => void
 }
 
-export function TaskSearchView({
-  task,
-  taskPosition,
-  sessionId,
-  condition,
-  isLastTask,
-  queryHistory,
-  setQueryHistory,
-  clickHistory,
-  setClickHistory,
-  bounceCount,
-  setBounceCount,
-  bounceCountRef,
-  onTaskComplete,
-}: Props) {
+// Remounted via key={taskIndex} in page.tsx on each task change.
+// All behavioral state resets per task so triggers evaluate within-task only.
+export function TaskSearchView({ task, taskPosition, sessionId, condition, isLastTask, onTaskComplete }: Props) {
   const taskStartTime = useRef(Date.now())
   const pendingClickRef = useRef<PendingClick | null>(null)
+  const bounceCountRef = useRef(0)
 
   const { query, setQuery, results, isLoading, error, executeSearch } = useSearch()
   const tracker = useTracker(sessionId, task.id, taskPosition)
+
+  const [queryHistory, setQueryHistory] = useState<string[]>([])
+  const [clickHistory, setClickHistory] = useState<ClickRecord[]>([])
+  const [bounceCount, setBounceCount] = useState(0)
   const [latestTrigger, setLatestTrigger] = useState<TriggerType | null>(null)
 
   useEffect(() => {

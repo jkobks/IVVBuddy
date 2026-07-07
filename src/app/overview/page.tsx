@@ -154,8 +154,8 @@ export default function OverviewPage() {
             ))}
           </div>
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 space-y-1">
-            <p className="text-xs font-medium text-blue-800">Verhaltensgedächtnis akkumuliert über alle 4 Tasks</p>
-            <p className="text-xs text-blue-700">Query-Historie, Click-Historie und Bounce-Count werden über die gesamte Session mitgezählt — der Buddy sieht das vollständige Suchverhalten. Wer in jedem Task dasselbe Muster zeigt, bekommt die Nachricht jedes Mal.</p>
+            <p className="text-xs font-medium text-blue-800">Verhaltenshistorie resettet pro Task</p>
+            <p className="text-xs text-blue-700">Query-Historie, Click-Historie und Bounce-Count starten in jedem Task bei null. Die Trigger wurden für die Auswertung innerhalb einer Suche designed — eine Task-übergreifende Akkumulierung würde Trigger wie snippet_only oder single_domain nach Task 1 dauerhaft deaktivieren. Wer dasselbe Muster in mehreren Tasks zeigt, bekommt die Nachricht trotzdem jedes Mal.</p>
           </div>
           <p className="text-xs text-gray-500">In der Control-Gruppe werden alle Trigger geloggt (<code>was_shown=false</code>), aber nie angezeigt.</p>
         </section>
