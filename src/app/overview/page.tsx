@@ -143,7 +143,7 @@ export default function OverviewPage() {
             {[
               { label: 'Max. Interventionen', value: '3', sub: 'pro Task' },
               { label: 'Cooldown', value: '30 s', sub: 'zwischen Anzeigen' },
-              { label: 'Pro Trigger', value: '1×', sub: 'pro Task (Reset bei Task-Wechsel)' },
+              { label: 'Pro Trigger', value: '1×', sub: 'pro Task, kann in jedem Task erneut feuern' },
             ].map(item => (
               <div key={item.label} className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
                 <p className="text-2xl font-bold text-gray-900">{item.value}</p>
@@ -151,6 +151,10 @@ export default function OverviewPage() {
                 <p className="text-xs text-gray-400">{item.sub}</p>
               </div>
             ))}
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 space-y-1">
+            <p className="text-xs font-medium text-blue-800">Verhaltensgedächtnis akkumuliert über alle 4 Tasks</p>
+            <p className="text-xs text-blue-700">Query-Historie, Click-Historie und Bounce-Count werden über die gesamte Session mitgezählt — der Buddy sieht das vollständige Suchverhalten. Wer in jedem Task dasselbe Muster zeigt, bekommt die Nachricht jedes Mal.</p>
           </div>
           <p className="text-xs text-gray-500">In der Control-Gruppe werden alle Trigger geloggt (<code>was_shown=false</code>), aber nie angezeigt.</p>
         </section>
