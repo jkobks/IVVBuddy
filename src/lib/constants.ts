@@ -18,7 +18,7 @@ export const BUDDY_MESSAGES: Record<TriggerType, string> = {
 }
 
 export const MAX_INTERVENTIONS = 3           // per task
-export const INTERVENTION_COOLDOWN_MS = 30_000 // min gap between shown interventions within a task
+export const INTERVENTION_COOLDOWN_MS = 0
 export const BUBBLE_DISMISS_MS = 8_000
 export const QUICK_DECISION_THRESHOLD_MS = 45_000
 export const STAGNATION_THRESHOLD = 0.8
