@@ -57,5 +57,9 @@ export function useTracker(sessionId: string, taskId: string, taskPosition: numb
     [sessionId, taskId, taskPosition]
   )
 
-  return { trackTaskStart, trackTaskEnd, trackQuery, trackClick, trackAnswer, trackIntervention }
+  const trackAnswerCancel = useCallback(() => {
+    post({ type: 'answer_cancel', sessionId, taskId, taskPosition, timestamp: new Date().toISOString() })
+  }, [sessionId, taskId, taskPosition])
+
+  return { trackTaskStart, trackTaskEnd, trackQuery, trackClick, trackAnswer, trackAnswerCancel, trackIntervention }
 }

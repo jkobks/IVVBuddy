@@ -101,6 +101,10 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleAnswerCancel = useCallback(() => {
+    tracker.trackAnswerCancel()
+  }, [tracker])
+
   const handleAnswerSubmit = useCallback(
     (answerText: string) => {
       tracker.trackAnswer(answerText)
@@ -133,7 +137,7 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
         />
         {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
         <ResultsList results={results} onClickResult={handleResultClick} />
-        <SubmitButton onOpen={handleAnswerOpen} onSubmit={handleAnswerSubmit} isLastTask={isLastTask} />
+        <SubmitButton onOpen={handleAnswerOpen} onCancel={handleAnswerCancel} onSubmit={handleAnswerSubmit} isLastTask={isLastTask} />
       </div>
       <BuddyContainer
         condition={condition}

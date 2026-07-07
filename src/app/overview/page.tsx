@@ -33,6 +33,7 @@ const TRIGGERS: {
     title: 'Schnellentscheidung',
     condition: 'Antwortformular < 45 s nach Task-Start geöffnet',
     detail: 'Date.now() − taskStartTime < 45 000 ms',
+    note: 'Evaluation beim Öffnen des Formulars (nicht beim Abschicken) — damit der Nutzer nach dem Buddy-Hinweis zurückgehen und weitersuchen kann. Geht er zurück ("Abbrechen"), wird das als answer_cancel geloggt. So lässt sich auswerten: Hat der Buddy jemanden dazu gebracht, doch nochmal zu suchen?',
   },
   {
     type: 'struggling',

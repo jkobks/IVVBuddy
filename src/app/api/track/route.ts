@@ -61,6 +61,13 @@ export async function POST(request: NextRequest) {
         dwell_time_seconds: body.dwellTimeSeconds ?? null,
         timestamp: body.timestamp,
       })
+    } else if (type === 'answer_cancel') {
+      await supabase.from('answer_cancels').insert({
+        session_id: body.sessionId,
+        task_id: body.taskId,
+        task_position: body.taskPosition,
+        timestamp: body.timestamp,
+      })
     } else if (type === 'answer') {
       await supabase.from('answers').insert({
         session_id: body.sessionId,

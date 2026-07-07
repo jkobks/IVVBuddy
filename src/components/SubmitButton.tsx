@@ -3,11 +3,12 @@ import { useState } from 'react'
 
 interface Props {
   onOpen: () => void
+  onCancel: () => void
   onSubmit: (answerText: string) => void
   isLastTask: boolean
 }
 
-export function SubmitButton({ onOpen, onSubmit, isLastTask }: Props) {
+export function SubmitButton({ onOpen, onCancel, onSubmit, isLastTask }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [answer, setAnswer] = useState('')
 
@@ -42,6 +43,7 @@ export function SubmitButton({ onOpen, onSubmit, isLastTask }: Props) {
             onClick={() => {
               setIsOpen(false)
               setAnswer('')
+              onCancel()
             }}
             className="bg-gray-100 text-gray-700 px-5 py-2 rounded-lg text-sm hover:bg-gray-200 transition-colors"
           >
