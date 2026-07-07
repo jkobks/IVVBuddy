@@ -7,6 +7,7 @@ const TRIGGERS: {
   title: string
   condition: string
   detail: string
+  note?: string
 }[] = [
   {
     type: 'top1_bias',
@@ -17,8 +18,9 @@ const TRIGGERS: {
   {
     type: 'query_stagnation',
     title: 'Query-Stagnation',
-    condition: 'Letzte 2 Queries sind ≥ 80 % ähnlich (Jaccard)',
+    condition: 'Letzte 2 Queries sind ≥ 80 % ähnlich (Jaccard-Ähnlichkeit)',
     detail: 'jaccardSimilarity(last, prev) ≥ 0.8',
+    note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (kein Trigger). "kollagen falten" vs. "kollagen falten" → 1,0 (Trigger). Ab 0,8 gilt die Query als zu ähnlich zur vorherigen.',
   },
   {
     type: 'single_domain',
@@ -138,11 +140,10 @@ export default function OverviewPage() {
 
         {/* Interventions rules */}
         <section className="bg-white rounded-2xl border border-gray-200 p-6 space-y-3">
-          <h2 className="font-semibold text-gray-900">Interventions-Regeln (pro Task)</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <h2 className="font-semibold text-gray-900">Interventions-Regeln</h2>
+          <div className="grid grid-cols-2 gap-3">
             {[
               { label: 'Max. Interventionen', value: '3', sub: 'pro Task' },
-              { label: 'Cooldown', value: '30 s', sub: 'zwischen Anzeigen' },
               { label: 'Pro Trigger', value: '1×', sub: 'pro Task, kann in jedem Task erneut feuern' },
             ].map(item => (
               <div key={item.label} className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
@@ -165,14 +166,17 @@ export default function OverviewPage() {
           <div className="space-y-6">
             {TRIGGERS.map((t, i) => (
               <div key={t.type} className="border border-gray-100 rounded-xl p-4 space-y-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
-                    <p className="font-semibold text-gray-900 mt-0.5">{t.title}</p>
-                    <p className="text-sm text-gray-600 mt-1">{t.condition}</p>
-                    <code className="text-xs text-gray-400 mt-1 block">{t.detail}</code>
-                  </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{t.title}</p>
+                  <p className="text-sm text-gray-600 mt-1">{t.condition}</p>
+                  <code className="text-xs text-gray-400 mt-1 block">{t.detail}</code>
                 </div>
+                {t.note && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <p className="text-xs text-amber-800 leading-relaxed">{t.note}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-400 mb-2">Buddy-Nachricht:</p>
                   <SpeechBubble message={BUDDY_MESSAGES[t.type]} />
