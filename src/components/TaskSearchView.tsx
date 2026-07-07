@@ -16,27 +16,44 @@ const TOTAL_TASKS = 4
 
 interface Props {
   task: Task
-  taskPosition: number  // 1-indexed
+  taskPosition: number
   sessionId: string
   condition: Condition
   isLastTask: boolean
+  // Behavioral history lives in page.tsx and accumulates across all tasks.
+  // key={taskIndex} on this component resets the search UI and trigger counters,
+  // while the history itself carries over so the Buddy sees the full session.
+  queryHistory: string[]
+  setQueryHistory: React.Dispatch<React.SetStateAction<string[]>>
+  clickHistory: ClickRecord[]
+  setClickHistory: React.Dispatch<React.SetStateAction<ClickRecord[]>>
+  bounceCount: number
+  setBounceCount: React.Dispatch<React.SetStateAction<number>>
+  bounceCountRef: React.MutableRefObject<number>
   onTaskComplete: () => void
 }
 
-// This component is mounted fresh for each task (keyed by taskIndex in page.tsx),
-// so all local state — query history, click history, Buddy counters — resets automatically.
-export function TaskSearchView({ task, taskPosition, sessionId, condition, isLastTask, onTaskComplete }: Props) {
+export function TaskSearchView({
+  task,
+  taskPosition,
+  sessionId,
+  condition,
+  isLastTask,
+  queryHistory,
+  setQueryHistory,
+  clickHistory,
+  setClickHistory,
+  bounceCount,
+  setBounceCount,
+  bounceCountRef,
+  onTaskComplete,
+}: Props) {
   const taskStartTime = useRef(Date.now())
+  const pendingClickRef = useRef<PendingClick | null>(null)
+
   const { query, setQuery, results, isLoading, error, executeSearch } = useSearch()
   const tracker = useTracker(sessionId, task.id, taskPosition)
-
-  const [queryHistory, setQueryHistory] = useState<string[]>([])
-  const [clickHistory, setClickHistory] = useState<ClickRecord[]>([])
-  const [bounceCount, setBounceCount] = useState(0)
   const [latestTrigger, setLatestTrigger] = useState<TriggerType | null>(null)
-
-  const pendingClickRef = useRef<PendingClick | null>(null)
-  const bounceCountRef = useRef(0)
 
   useEffect(() => {
     tracker.trackTaskStart()
