@@ -166,7 +166,7 @@ Zuständig: `src/lib/buddyMessage.ts` (Client, Kontext-Auswahl + Fetch mit Timeo
 
 ### LLM-Integration
 
-- **Modell:** `gemini-2.5-flash` (Google Generative AI API — schnell + günstig, für kurze Nachrichten ausreichend)
+- **Modell:** `gemini-2.5-flash-lite` (Google Generative AI API — schnell, günstig, großzügigeres Free-Tier-Kontingent als `gemini-2.5-flash`; für kurze Nachrichten ausreichend)
 - **Aufruf:** ausschließlich server-side über `/api/buddy-message` — der Gemini-API-Key (`GEMINI_API_KEY`) ist nie im Client sichtbar
 - **Input:** `trigger_type`, Task-Thema (`task.topic`, z. B. `"Kollagen gegen Falten"`), plus je nach Trigger die relevanten Query-Historie-Einträge, der Ergebnis-Titel (Trigger 1) oder die Domain (Trigger 3)
 - **Output:** ein kurzer deutscher Satz (max. 2 Sätze), freundlicher Ton, im Stil der bisherigen festen Buddy-Nachrichten
@@ -204,6 +204,8 @@ Der LLM-Call kann 1–3 s dauern, der Buddy soll aber zeitnah zum Trigger ersche
 3. **Timeout:** Antwortet die API nicht innerhalb von 4 s (`LLM_TIMEOUT_MS`), bricht der Client-Request ab.
 4. **Fehlerfall:** Schlägt der API-Call fehl (Netzwerkfehler, fehlender Key, Rate-Limit, leere Antwort) oder Timeout greift → Fallback auf den **festen Text** dieses Triggers (`BUDDY_MESSAGES`, siehe `src/lib/constants.ts`). Jeder dynamische Trigger hat also garantiert einen festen Fallback-Text.
 5. Wechselt die Task, bevor eine laufende Generierung abgeschlossen ist, wird die Intervention beim Unmount sofort mit dem Fallback-Text geloggt statt verworfen (kein Datenverlust in der Auswertung).
+
+> **Hinweis für Wartung:** `generationConfig.thinkingConfig.thinkingBudget` ist bewusst auf `0` gesetzt. Gemini-2.5-Modelle nutzen sonst standardmäßig einen Teil von `maxOutputTokens` für internes "Thinking" — bei einem knappen Budget wird dabei der sichtbare Antworttext abgeschnitten (`finishReason: MAX_TOKENS`), was in der Praxis fast immer zum Fallback-Text führte, obwohl die API technisch erreichbar war. Für einen kurzen Hinweissatz ist Thinking ohnehin unnötig und Deaktivierung senkt zusätzlich die Latenz.
 
 ### Logging-Erweiterung
 

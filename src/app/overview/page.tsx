@@ -203,7 +203,7 @@ export default function OverviewPage() {
           </p>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-              <p className="text-sm font-bold text-gray-900">gemini-2.5-flash</p>
+              <p className="text-sm font-bold text-gray-900">gemini-2.5-flash-lite</p>
               <p className="text-xs text-gray-500 mt-1">Modell, server-side via /api/buddy-message</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">

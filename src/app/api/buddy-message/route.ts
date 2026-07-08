@@ -9,7 +9,7 @@ const DYNAMIC_TRIGGER_TYPES: DynamicTriggerType[] = [
   'no_refinement',
 ]
 
-const GEMINI_MODEL = 'gemini-2.5-flash'
+const GEMINI_MODEL = 'gemini-2.5-flash-lite'
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 // Serverseitiges Zeitbudget mit Marge über dem Client-Timeout (der Client bricht selbst nach 4s ab
 // und nutzt dann seinen Fallback-Text — dieses Limit verhindert nur, dass der Request ewig offen bleibt).
