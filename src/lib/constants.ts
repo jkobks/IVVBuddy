@@ -1,5 +1,17 @@
-import type { TriggerType } from '@/types'
+import type { DynamicTriggerType, TriggerType } from '@/types'
 
+// Trigger 2 und 7 sind voll dynamisch (KI schlägt Suchbegriffe vor),
+// Trigger 1 und 3 sind halb dynamisch (KI greift Kontext auf, macht aber keinen inhaltlichen Vorschlag).
+// Alle anderen Trigger nutzen ausschließlich den festen Text unten.
+export const DYNAMIC_TRIGGER_TYPES: DynamicTriggerType[] = [
+  'top1_bias',
+  'query_stagnation',
+  'single_domain',
+  'no_refinement',
+]
+
+// Fallback-Texte: werden angezeigt wenn ein Trigger fest ist, oder wenn die
+// LLM-Generierung für einen dynamischen Trigger fehlschlägt/zu lange dauert.
 export const BUDDY_MESSAGES: Record<TriggerType, string> = {
   top1_bias:
     'Du hast direkt das erste Ergebnis geöffnet — weiter unten stehen oft andere Perspektiven.',
@@ -20,6 +32,11 @@ export const BUDDY_MESSAGES: Record<TriggerType, string> = {
 export const MAX_INTERVENTIONS = 3           // per task
 export const INTERVENTION_COOLDOWN_MS = 0
 export const BUBBLE_DISMISS_MS = 8_000
+
+// Platzhaltertext während die LLM-Nachricht generiert wird
+export const BUDDY_PLACEHOLDER = '···'
+// Max. Wartezeit auf die LLM-Antwort, danach Fallback auf den festen Text
+export const LLM_TIMEOUT_MS = 4_000
 export const QUICK_DECISION_THRESHOLD_MS = 45_000
 export const STAGNATION_THRESHOLD = 0.5
 export const TOP1_CONSECUTIVE_THRESHOLD = 2

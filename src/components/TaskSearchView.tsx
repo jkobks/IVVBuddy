@@ -81,7 +81,7 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
         const dwell = (now - pendingClickRef.current.clickTime) / 1000
         flushPendingClick(dwell)
       }
-      const record: ClickRecord = { domain: result.displayLink, rank: result.rank }
+      const record: ClickRecord = { domain: result.displayLink, rank: result.rank, title: result.title }
       setClickHistory((prev) => [...prev, record])
       pendingClickRef.current = { result, clickTime: now }
       window.open(result.url, '_blank', 'noopener,noreferrer')
@@ -115,8 +115,14 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
   )
 
   const handleInterventionFired = useCallback(
-    (type: TriggerType, wasShown: boolean) => {
-      tracker.trackIntervention(type, wasShown)
+    (
+      type: TriggerType,
+      wasShown: boolean,
+      messageText: string | null,
+      wasDynamic: boolean,
+      generationTimeMs: number | null
+    ) => {
+      tracker.trackIntervention(type, wasShown, messageText, wasDynamic, generationTimeMs)
     },
     [tracker]
   )
@@ -142,6 +148,9 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
       <BuddyContainer
         condition={condition}
         latestTrigger={latestTrigger}
+        taskTopic={task.topic}
+        queryHistory={queryHistory}
+        clickHistory={clickHistory}
         onTriggerConsumed={handleTriggerConsumed}
         onInterventionFired={handleInterventionFired}
       />

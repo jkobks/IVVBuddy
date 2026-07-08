@@ -83,6 +83,9 @@ export async function POST(request: NextRequest) {
         task_position: body.taskPosition,
         trigger_type: body.triggerType,
         was_shown: body.wasShown,
+        message_text: body.messageText ?? null,
+        was_dynamic: body.wasDynamic ?? false,
+        generation_time_ms: body.generationTimeMs ?? null,
         timestamp: body.timestamp,
       })
     }

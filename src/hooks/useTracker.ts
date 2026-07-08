@@ -51,8 +51,25 @@ export function useTracker(sessionId: string, taskId: string, taskPosition: numb
   )
 
   const trackIntervention = useCallback(
-    (triggerType: TriggerType, wasShown: boolean) => {
-      post({ type: 'intervention', sessionId, taskId, taskPosition, triggerType, wasShown, timestamp: new Date().toISOString() })
+    (
+      triggerType: TriggerType,
+      wasShown: boolean,
+      messageText: string | null,
+      wasDynamic: boolean,
+      generationTimeMs: number | null
+    ) => {
+      post({
+        type: 'intervention',
+        sessionId,
+        taskId,
+        taskPosition,
+        triggerType,
+        wasShown,
+        messageText,
+        wasDynamic,
+        generationTimeMs,
+        timestamp: new Date().toISOString(),
+      })
     },
     [sessionId, taskId, taskPosition]
   )

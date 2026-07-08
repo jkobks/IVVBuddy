@@ -148,17 +148,88 @@ queryHistory.every(q =>
 
 ---
 
+## Dynamische Buddy-Nachrichten (LLM)
+
+Die **Trigger-Erkennung bleibt vollständig deterministisch** (siehe Trigger 1–7 oben) — Timing, Bedingungen, das Interventions-Limit und die `was_shown`-Logik sind davon unberührt. Dynamisch ist **nur die Formulierung** der angezeigten Nachricht, und auch das nur für einen Teil der Trigger, und nur in der `buddy`-Condition (die `control`-Gruppe zeigt ohnehin nie eine Nachricht).
+
+### Welche Trigger dynamisch sind
+
+| Grad | Trigger | Was die KI bekommt | Was die KI liefert |
+|------|---------|--------------------|---------------------|
+| **Voll dynamisch** | 2 Query-Stagnation | die letzten 2 Queries + Task-Thema | benennt das Muster + schlägt 1-2 alternative Suchbegriffe vor |
+| **Voll dynamisch** | 7 Fehlende Verfeinerung | alle bisherigen Queries + Task-Thema | benennt das Muster + schlägt 1-2 spezifischere Suchbegriffe vor |
+| **Halb dynamisch** | 1 Top-1 Bias | Titel des zuletzt geklickten Rang-1-Ergebnisses | greift den Titel auf, **kein** inhaltlicher Suchvorschlag |
+| **Halb dynamisch** | 3 Single Domain | die mehrfach besuchte Domain | benennt die Domain, **kein** inhaltlicher Suchvorschlag |
+| Fest | 4 Schnellentscheidung, 5 Struggling, 6 Snippet-only | — | immer der feste Text von oben |
+
+Zuständig: `src/lib/buddyMessage.ts` (Client, Kontext-Auswahl + Fetch mit Timeout) und `src/app/api/buddy-message/route.ts` (Server-Proxy zur Gemini API). Die Anzeige-Orchestrierung liegt weiterhin in `src/components/buddy/BuddyContainer.tsx`.
+
+### LLM-Integration
+
+- **Modell:** `gemini-2.5-flash` (Google Generative AI API — schnell + günstig, für kurze Nachrichten ausreichend)
+- **Aufruf:** ausschließlich server-side über `/api/buddy-message` — der Gemini-API-Key (`GEMINI_API_KEY`) ist nie im Client sichtbar
+- **Input:** `trigger_type`, Task-Thema (`task.topic`, z. B. `"Kollagen gegen Falten"`), plus je nach Trigger die relevanten Query-Historie-Einträge, der Ergebnis-Titel (Trigger 1) oder die Domain (Trigger 3)
+- **Output:** ein kurzer deutscher Satz (max. 2 Sätze), freundlicher Ton, im Stil der bisherigen festen Buddy-Nachrichten
+
+### System-Prompt (für Reproduzierbarkeit)
+
+```
+Du bist der "Search Buddy" in einer wissenschaftlichen Studie zu Informationsverhalten bei der Websuche. Du hilfst Studienteilnehmenden dabei, BESSER ZU SUCHEN — nicht dabei, ihre Frage zu beantworten.
+
+Du bekommst Informationen über das bisherige Suchverhalten einer Person zu einem Gesundheits-Thema sowie das erkannte Suchmuster.
+
+Deine Aufgabe: Formuliere einen kurzen, freundlichen Hinweis auf Deutsch (maximal 2 Sätze), der zur jeweiligen Anweisung im User-Prompt passt.
+
+KRITISCHE REGEL — unbedingt einhalten:
+Du darfst AUSSCHLIESSLICH Hinweise zur Suchstrategie geben (welche Begriffe, wie formulieren, mehr/andere Quellen ansehen). Du darfst NIEMALS:
+- inhaltliche Hinweise zur richtigen Antwort der Gesundheitsfrage geben
+- suggerieren, ob ein Mittel oder eine Methode wirkt, sicher ist oder empfehlenswert ist
+- wertende oder ergebnisvorwegnehmende Begriffe verwenden (z. B. NICHT "Kollagen wirkungslos", sondern neutral "Kollagen Studienlage" oder "Kollagen Wirkung Forschung")
+
+Diese Regel ist essentiell für die wissenschaftliche Validität der Studie — jeder Verstoß macht die Erhebung unbrauchbar. Halte dich im Zweifel strikt neutral und beschränke dich auf reine Suchstrategie-Hinweise.
+
+Antworte NUR mit dem Hinweistext selbst, ohne Anführungszeichen, ohne Einleitung, ohne Meta-Kommentar.
+```
+
+Der jeweilige User-Prompt wird pro Trigger in `src/lib/buddyPrompt.ts` (`buildBuddyUserPrompt`) zusammengesetzt und enthält den oben genannten Kontext.
+
+**Inhaltliche Einschränkung:** Der Buddy hilft ausschließlich beim **besseren Suchen** (Begriffe, Formulierung, Quellenvielfalt) — niemals beim Beantworten der Gesundheitsfrage selbst. Das ist Bedingung für die wissenschaftliche Validität der Studie: Ein Buddy, der inhaltlich Position bezieht, würde die zu untersuchende Suchentscheidung der Teilnehmenden verzerren statt nur ihr Suchverhalten zu unterstützen.
+
+### Latenz- und Fallback-Verhalten
+
+Der LLM-Call kann 1–3 s dauern, der Buddy soll aber zeitnah zum Trigger erscheinen:
+
+1. Trigger feuert → Buddy erscheint **sofort** mit einem neutralen Platzhalter (`···`).
+2. Sobald die generierte Nachricht eintrifft, ersetzt sie den Platzhalter; die 8-Sekunden-Anzeigedauer (`BUBBLE_DISMISS_MS`) startet erst ab diesem Zeitpunkt neu.
+3. **Timeout:** Antwortet die API nicht innerhalb von 4 s (`LLM_TIMEOUT_MS`), bricht der Client-Request ab.
+4. **Fehlerfall:** Schlägt der API-Call fehl (Netzwerkfehler, fehlender Key, Rate-Limit, leere Antwort) oder Timeout greift → Fallback auf den **festen Text** dieses Triggers (`BUDDY_MESSAGES`, siehe `src/lib/constants.ts`). Jeder dynamische Trigger hat also garantiert einen festen Fallback-Text.
+5. Wechselt die Task, bevor eine laufende Generierung abgeschlossen ist, wird die Intervention beim Unmount sofort mit dem Fallback-Text geloggt statt verworfen (kein Datenverlust in der Auswertung).
+
+### Logging-Erweiterung
+
+Zusätzlich zu den bisherigen Feldern speichert `interventions` pro Eintrag:
+
+| Feld | Bedeutung |
+|------|-----------|
+| `message_text` | der tatsächlich angezeigte Text — dynamisch generiert oder Fallback |
+| `was_dynamic` | `true` = Text kam vom LLM, `false` = fester Fallback-Text wurde genutzt |
+| `generation_time_ms` | Dauer des LLM-Calls in ms; `NULL` wenn kein Call gemacht wurde (fester Trigger, Control-Gruppe, Limit erreicht oder Trigger nicht angezeigt) |
+
+Diese Felder sind zentral für die Auswertung (z. B. Anteil erfolgreicher LLM-Generierungen, Effekt dynamischer vs. fester Formulierung) und für die Reproduzierbarkeit im Paper.
+
+---
+
 ## Interventions-Logik (Zusammenfassung)
 
-| # | Trigger | Feuert nach … |
-|---|---------|--------------|
-| 1 | Top-1 Bias | 2 aufeinanderfolgenden Rang-1-Klicks |
-| 2 | Query-Stagnation | 2 ähnlichen Queries (Jaccard ≥ 0.8) |
-| 3 | Single Domain | 3 Klicks zur selben Domain |
-| 4 | Schnellentscheidung | Antwortformular < 45 s nach Task-Start |
-| 5 | Struggling | 2 Bounces mit dwell < 5 s |
-| 6 | Snippet-only | 3+ Queries, 0 Klicks |
-| 7 | Fehlende Verfeinerung | 3+ Queries, alle ≤ 2 Wörter |
+| # | Trigger | Feuert nach … | Formulierung |
+|---|---------|--------------|---------------|
+| 1 | Top-1 Bias | 2 aufeinanderfolgenden Rang-1-Klicks | halb dynamisch |
+| 2 | Query-Stagnation | 2 ähnlichen Queries (Jaccard ≥ 0.8) | voll dynamisch |
+| 3 | Single Domain | 3 Klicks zur selben Domain | halb dynamisch |
+| 4 | Schnellentscheidung | Antwortformular < 45 s nach Task-Start | fest |
+| 5 | Struggling | 2 Bounces mit dwell < 5 s | fest |
+| 6 | Snippet-only | 3+ Queries, 0 Klicks | fest |
+| 7 | Fehlende Verfeinerung | 3+ Queries, alle ≤ 2 Wörter | voll dynamisch |
 
 **Regeln (pro Task):**
 - Maximal **3 Interventionen pro Task** werden angezeigt.
@@ -240,6 +311,9 @@ In **beiden** Bedingungen werden alle 7 Trigger-Bedingungen kontinuierlich ausge
 | `task_position` | INT | Reihenfolge-Position (1–4) |
 | `trigger_type` | TEXT | Einer der 7 Trigger-Typen |
 | `was_shown` | BOOLEAN | `true` = angezeigt, `false` = erfüllt aber verworfen |
+| `message_text` | TEXT | Tatsächlich angezeigter Text (dynamisch oder Fallback), `NULL` wenn nicht angezeigt |
+| `was_dynamic` | BOOLEAN | `true` = Text vom LLM generiert, `false` = fester Fallback-Text |
+| `generation_time_ms` | FLOAT | Dauer des LLM-Calls in ms, `NULL` wenn kein Call gemacht wurde |
 | `timestamp` | TIMESTAMPTZ | Zeitpunkt der Trigger-Erkennung |
 
 ---
@@ -276,11 +350,14 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_CSE_ID=...
+GEMINI_API_KEY=...      # für dynamische Buddy-Nachrichten, siehe "Dynamische Buddy-Nachrichten (LLM)"
 
 # Datenbank-Migrationen ausführen (Supabase Dashboard oder CLI)
 # supabase/migrations/001_initial_schema.sql
 # supabase/migrations/002_new_triggers_and_tracking.sql
 # supabase/migrations/003_multi_task.sql
+# supabase/migrations/004_answer_cancels.sql
+# supabase/migrations/005_dynamic_buddy_messages.sql
 
 # Entwicklungsserver starten
 npm run dev

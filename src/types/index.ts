@@ -20,7 +20,11 @@ export interface SearchResult {
 export interface ClickRecord {
   domain: string
   rank: number
+  title: string
 }
+
+// Trigger, für die der Buddy-Text via LLM formuliert wird (Erkennung bleibt deterministisch)
+export type DynamicTriggerType = 'top1_bias' | 'query_stagnation' | 'single_domain' | 'no_refinement'
 
 export interface PendingClick {
   result: SearchResult
