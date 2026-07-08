@@ -1,6 +1,9 @@
 import { TASKS } from '@/lib/tasks'
 import { BUDDY_MESSAGES } from '@/lib/constants'
+import { BUDDY_SYSTEM_PROMPT } from '@/lib/buddyPrompt'
 import type { TriggerType } from '@/types'
+
+type Formulation = 'voll dynamisch' | 'halb dynamisch' | 'fest'
 
 const TRIGGERS: {
   type: TriggerType
@@ -8,12 +11,16 @@ const TRIGGERS: {
   condition: string
   detail: string
   note?: string
+  formulation: Formulation
+  formulationNote?: string
 }[] = [
   {
     type: 'top1_bias',
     title: 'Top-1 Bias',
     condition: 'Letzte 2 Klicks waren beide Rang 1',
     detail: 'clickHistory.slice(-2).every(c => c.rank === 1)',
+    formulation: 'halb dynamisch',
+    formulationNote: 'KI erhält den Titel des zuletzt geklickten Rang-1-Ergebnisses, macht aber keinen eigenen Suchvorschlag.',
   },
   {
     type: 'query_stagnation',
@@ -21,12 +28,16 @@ const TRIGGERS: {
     condition: 'Letzte 2 Queries sind ≥ 50 % ähnlich (Jaccard-Ähnlichkeit)',
     detail: 'jaccardSimilarity(last, prev) ≥ 0.5',
     note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (Trigger). "kollagen studie" vs. "apfelessig abnehmen" → 0/4 = 0,0 (kein Trigger). Ab 0,5 gilt die Query als zu ähnlich zur vorherigen.',
+    formulation: 'voll dynamisch',
+    formulationNote: 'KI erhält die letzten 2 Queries + Task-Thema und schlägt 1-2 alternative Suchbegriffe vor.',
   },
   {
     type: 'single_domain',
     title: 'Single Domain',
     condition: 'Alle Klicks (≥ 3) gehen zur selben Domain',
     detail: 'new Set(clickHistory.map(c => c.domain)).size === 1',
+    formulation: 'halb dynamisch',
+    formulationNote: 'KI erhält die mehrfach besuchte Domain, macht aber keinen eigenen Suchvorschlag.',
   },
   {
     type: 'quick_decision',
@@ -34,26 +45,45 @@ const TRIGGERS: {
     condition: 'Antwortformular < 45 s nach Task-Start geöffnet',
     detail: 'Date.now() − taskStartTime < 45 000 ms',
     note: 'Evaluation beim Öffnen des Formulars (nicht beim Abschicken) — damit der Nutzer nach dem Buddy-Hinweis zurückgehen und weitersuchen kann. Geht er zurück ("Abbrechen"), wird das als answer_cancel geloggt. So lässt sich auswerten: Hat der Buddy jemanden dazu gebracht, doch nochmal zu suchen?',
+    formulation: 'fest',
   },
   {
     type: 'struggling',
     title: 'Struggling',
     condition: '2 Bounces: Dwell-Zeit < 5 s nach Klick',
     detail: 'bounceCount ≥ 2 (dwell < 5 s pro Klick)',
+    formulation: 'fest',
   },
   {
     type: 'snippet_only',
     title: 'Snippet-only',
     condition: '3+ Queries abgeschickt, aber 0 Klicks',
     detail: 'queryHistory.length ≥ 3 && clickHistory.length === 0',
+    formulation: 'fest',
   },
   {
     type: 'no_refinement',
     title: 'Keine Begriffsverfeinerung',
     condition: 'Alle Queries (≥ 3) bestehen aus ≤ 2 Wörtern',
     detail: 'queryHistory.every(q => wordCount(q) ≤ 2)',
+    formulation: 'voll dynamisch',
+    formulationNote: 'KI erhält alle bisherigen Queries + Task-Thema und schlägt 1-2 spezifischere Suchbegriffe vor.',
   },
 ]
+
+const FORMULATION_STYLE: Record<Formulation, string> = {
+  'voll dynamisch': 'bg-purple-100 text-purple-700',
+  'halb dynamisch': 'bg-indigo-100 text-indigo-700',
+  fest: 'bg-gray-200 text-gray-600',
+}
+
+function FormulationBadge({ value }: { value: Formulation }) {
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${FORMULATION_STYLE[value]}`}>
+      {value}
+    </span>
+  )
+}
 
 function SpeechBubble({ message }: { message: string }) {
   return (
@@ -161,6 +191,48 @@ export default function OverviewPage() {
           <p className="text-xs text-gray-500">In der Control-Gruppe werden alle Trigger geloggt (<code>was_shown=false</code>), aber nie angezeigt.</p>
         </section>
 
+        {/* LLM integration */}
+        <section className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+          <h2 className="font-semibold text-gray-900">Dynamische Buddy-Nachrichten (LLM)</h2>
+          <p className="text-sm text-gray-600">
+            Die Trigger-Erkennung bleibt vollständig deterministisch — Timing, Bedingungen und das
+            Interventions-Limit sind unverändert. Dynamisch ist nur die <strong>Formulierung</strong> der
+            Nachricht, und auch das nur für 4 der 7 Trigger (siehe Badges unten): <FormulationBadge value="voll dynamisch" /> schlägt
+            alternative Suchbegriffe vor, <FormulationBadge value="halb dynamisch" /> greift nur den beobachteten
+            Kontext auf, <FormulationBadge value="fest" /> zeigt immer denselben Text.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+              <p className="text-sm font-bold text-gray-900">gemini-2.5-flash</p>
+              <p className="text-xs text-gray-500 mt-1">Modell, server-side via /api/buddy-message</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+              <p className="text-sm font-bold text-gray-900">4 000 ms</p>
+              <p className="text-xs text-gray-500 mt-1">Timeout, danach Fallback-Text</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+              <p className="text-sm font-bold text-gray-900">Platzhalter „···“</p>
+              <p className="text-xs text-gray-500 mt-1">erscheint sofort, wird ersetzt sobald die Antwort da ist</p>
+            </div>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <p className="text-xs font-medium text-amber-800 mb-1">Harte inhaltliche Einschränkung</p>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              Die KI darf ausschließlich zur Suchstrategie äußern (Begriffe, Formulierung, Quellenvielfalt) —
+              niemals inhaltlich zur Gesundheitsfrage selbst. Das ist im System-Prompt hart verankert und
+              essentiell für die wissenschaftliche Validität der Studie.
+            </p>
+          </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-gray-500 font-medium">System-Prompt anzeigen (Reproduzierbarkeit)</summary>
+            <pre className="mt-2 bg-gray-900 text-gray-100 rounded-lg p-3 whitespace-pre-wrap leading-relaxed overflow-x-auto">{BUDDY_SYSTEM_PROMPT}</pre>
+          </details>
+          <p className="text-xs text-gray-500">
+            Geloggt wird pro Intervention zusätzlich <code>message_text</code> (tatsächlich angezeigter Text),
+            <code> was_dynamic</code> (KI-generiert vs. Fallback) und <code>generation_time_ms</code> (Dauer des LLM-Calls).
+          </p>
+        </section>
+
         {/* Triggers */}
         <section className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
           <h2 className="font-semibold text-gray-900">Die 7 Trigger</h2>
@@ -168,7 +240,10 @@ export default function OverviewPage() {
             {TRIGGERS.map((t, i) => (
               <div key={t.type} className="border border-gray-100 rounded-xl p-4 space-y-3">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
+                    <FormulationBadge value={t.formulation} />
+                  </div>
                   <p className="font-semibold text-gray-900 mt-0.5">{t.title}</p>
                   <p className="text-sm text-gray-600 mt-1">{t.condition}</p>
                   <code className="text-xs text-gray-400 mt-1 block">{t.detail}</code>
@@ -178,8 +253,13 @@ export default function OverviewPage() {
                     <p className="text-xs text-amber-800 leading-relaxed">{t.note}</p>
                   </div>
                 )}
+                {t.formulationNote && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                    <p className="text-xs text-indigo-800 leading-relaxed">{t.formulationNote}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-xs text-gray-400 mb-2">Buddy-Nachricht:</p>
+                  <p className="text-xs text-gray-400 mb-2">{t.formulation === 'fest' ? 'Buddy-Nachricht:' : 'Fallback-Text (bei Timeout/Fehler der KI-Generierung):'}</p>
                   <SpeechBubble message={BUDDY_MESSAGES[t.type]} />
                 </div>
               </div>
@@ -197,7 +277,7 @@ export default function OverviewPage() {
               { table: 'queries', fields: 'session_id, task_id, task_position, query_text, word_count, timestamp' },
               { table: 'clicks', fields: 'session_id, task_id, task_position, url, domain, rank, dwell_time_seconds, timestamp' },
               { table: 'answers', fields: 'session_id, task_id, task_position, answer_text, timestamp' },
-              { table: 'interventions', fields: 'session_id, task_id, task_position, trigger_type, was_shown, timestamp' },
+              { table: 'interventions', fields: 'session_id, task_id, task_position, trigger_type, was_shown, message_text, was_dynamic, generation_time_ms, timestamp' },
             ].map(row => (
               <div key={row.table} className="flex gap-3 items-baseline">
                 <code className="text-xs font-bold text-blue-700 w-32 shrink-0">{row.table}</code>
