@@ -162,12 +162,12 @@ Die **Trigger-Erkennung bleibt vollständig deterministisch** (siehe Trigger 1�
 | **Halb dynamisch** | 3 Single Domain | die mehrfach besuchte Domain | benennt die Domain, **kein** inhaltlicher Suchvorschlag |
 | Fest | 4 Schnellentscheidung, 5 Struggling, 6 Snippet-only | — | immer der feste Text von oben |
 
-Zuständig: `src/lib/buddyMessage.ts` (Client, Kontext-Auswahl + Fetch mit Timeout) und `src/app/api/buddy-message/route.ts` (Server-Proxy zur Gemini API). Die Anzeige-Orchestrierung liegt weiterhin in `src/components/buddy/BuddyContainer.tsx`.
+Zuständig: `src/lib/buddyMessage.ts` (Client, Kontext-Auswahl + Fetch mit Timeout) und `src/app/api/buddy-message/route.ts` (Server-Proxy zur Anthropic API). Die Anzeige-Orchestrierung liegt weiterhin in `src/components/buddy/BuddyContainer.tsx`.
 
 ### LLM-Integration
 
-- **Modell:** `gemini-2.5-flash-lite` (Google Generative AI API — schnell, günstig, großzügigeres Free-Tier-Kontingent als `gemini-2.5-flash`; für kurze Nachrichten ausreichend)
-- **Aufruf:** ausschließlich server-side über `/api/buddy-message` — der Gemini-API-Key (`GEMINI_API_KEY`) ist nie im Client sichtbar
+- **Modell:** `claude-haiku-4-5-20251001` (Anthropic Messages API — schnell + günstig, für kurze Nachrichten ausreichend)
+- **Aufruf:** ausschließlich server-side über `/api/buddy-message` — der Anthropic-API-Key (`ANTHROPIC_API_KEY`) ist nie im Client sichtbar. **Wichtig:** Dies ist ein separater API-Key mit eigener Pay-per-Use-Abrechnung (console.anthropic.com), nicht durch ein claude.ai-Pro-Abo abgedeckt. Die Kosten pro Nachricht sind bei Haiku aber minimal.
 - **Input:** `trigger_type`, Task-Thema (`task.topic`, z. B. `"Kollagen gegen Falten"`), plus je nach Trigger die relevanten Query-Historie-Einträge, der Ergebnis-Titel (Trigger 1) oder die Domain (Trigger 3)
 - **Output:** ein kurzer deutscher Satz (max. 2 Sätze), freundlicher Ton, im Stil der bisherigen festen Buddy-Nachrichten
 
@@ -201,11 +201,11 @@ Der LLM-Call kann 1–3 s dauern, der Buddy soll aber zeitnah zum Trigger ersche
 
 1. Trigger feuert → Buddy erscheint **sofort** mit einem neutralen Platzhalter (`···`).
 2. Sobald die generierte Nachricht eintrifft, ersetzt sie den Platzhalter; die 8-Sekunden-Anzeigedauer (`BUBBLE_DISMISS_MS`) startet erst ab diesem Zeitpunkt neu.
-3. **Timeout:** Antwortet die API nicht innerhalb von 4 s (`LLM_TIMEOUT_MS`), bricht der Client-Request ab.
+3. **Timeout:** Antwortet die API nicht innerhalb von 7 s (`LLM_TIMEOUT_MS`), bricht der Client-Request ab. (Gemessene reale Latenz von `claude-haiku-4-5` liegt für diese Prompt-Länge bei ~1,5–6 s; ein knapperes Timeout hätte einen Großteil der erfolgreichen Generierungen abgebrochen.)
 4. **Fehlerfall:** Schlägt der API-Call fehl (Netzwerkfehler, fehlender Key, Rate-Limit, leere Antwort) oder Timeout greift → Fallback auf den **festen Text** dieses Triggers (`BUDDY_MESSAGES`, siehe `src/lib/constants.ts`). Jeder dynamische Trigger hat also garantiert einen festen Fallback-Text.
 5. Wechselt die Task, bevor eine laufende Generierung abgeschlossen ist, wird die Intervention beim Unmount sofort mit dem Fallback-Text geloggt statt verworfen (kein Datenverlust in der Auswertung).
 
-> **Hinweis für Wartung:** `generationConfig.thinkingConfig.thinkingBudget` ist bewusst auf `0` gesetzt. Gemini-2.5-Modelle nutzen sonst standardmäßig einen Teil von `maxOutputTokens` für internes "Thinking" — bei einem knappen Budget wird dabei der sichtbare Antworttext abgeschnitten (`finishReason: MAX_TOKENS`), was in der Praxis fast immer zum Fallback-Text führte, obwohl die API technisch erreichbar war. Für einen kurzen Hinweissatz ist Thinking ohnehin unnötig und Deaktivierung senkt zusätzlich die Latenz.
+> **Hinweis zur Modellwahl:** Zwischenzeitlich wurde Google Gemini (`gemini-2.5-flash-lite`) angebunden. Gemini wurde verworfen, weil das kostenlose Kontingent (Stand Sommer 2026 von Google gekürzt) bei nur **20 Requests/Tag** lag — für eigenes Testen kaum, für eine echte Studie mit mehreren Teilnehmenden gar nicht ausreichend. Zusätzlich lag die reale Antwortzeit bei ~5 s, über dem 4-Sekunden-Client-Timeout, wodurch selbst erfolgreiche Generierungen fast immer verworfen und durch den Fallback-Text ersetzt wurden. Groq (kostenlos, sehr niedrige Latenz) scheiterte am Login. Anthropic erfordert zwar einen bezahlten API-Key, ist aber bei Haiku für dieses Nachrichtenvolumen sehr günstig und in diesem Projekt am zuverlässigsten getestet.
 
 ### Logging-Erweiterung
 
@@ -352,7 +352,7 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 GOOGLE_API_KEY=...
 GOOGLE_CSE_ID=...
-GEMINI_API_KEY=...      # für dynamische Buddy-Nachrichten, siehe "Dynamische Buddy-Nachrichten (LLM)"
+ANTHROPIC_API_KEY=...   # für dynamische Buddy-Nachrichten, siehe "Dynamische Buddy-Nachrichten (LLM)"
 
 # Datenbank-Migrationen ausführen (Supabase Dashboard oder CLI)
 # supabase/migrations/001_initial_schema.sql

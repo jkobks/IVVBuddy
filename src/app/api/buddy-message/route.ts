@@ -9,11 +9,12 @@ const DYNAMIC_TRIGGER_TYPES: DynamicTriggerType[] = [
   'no_refinement',
 ]
 
-const GEMINI_MODEL = 'gemini-2.5-flash-lite'
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
-// Serverseitiges Zeitbudget mit Marge über dem Client-Timeout (der Client bricht selbst nach 4s ab
-// und nutzt dann seinen Fallback-Text — dieses Limit verhindert nur, dass der Request ewig offen bleibt).
-const UPSTREAM_TIMEOUT_MS = 8_000
+const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
+// Serverseitiges Zeitbudget mit Marge über dem Client-Timeout (der Client bricht selbst nach
+// LLM_TIMEOUT_MS ab und nutzt dann seinen Fallback-Text — dieses Limit verhindert nur, dass der
+// Request ewig offen bleibt).
+const UPSTREAM_TIMEOUT_MS = 12_000
 
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     domain: typeof body.domain === 'string' ? body.domain : undefined,
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return Response.json({ error: 'LLM not configured' }, { status: 503 })
   }
@@ -50,23 +51,19 @@ export async function POST(request: NextRequest) {
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
 
   try {
-    const res = await fetch(GEMINI_URL, {
+    const res = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-goog-api-key': apiKey,
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: BUDDY_SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: buildBuddyUserPrompt(ctx) }] }],
-        generationConfig: {
-          maxOutputTokens: 200,
-          temperature: 0.7,
-          // Ohne dies verbrennt das Modell einen Großteil von maxOutputTokens auf internes
-          // "Thinking" und schneidet den sichtbaren Text ab (finishReason: MAX_TOKENS).
-          // Für einen kurzen Hinweissatz ist Thinking unnötig — spart auch Latenz.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+        model: ANTHROPIC_MODEL,
+        max_tokens: 200,
+        temperature: 0.7,
+        system: BUDDY_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: buildBuddyUserPrompt(ctx) }],
       }),
       signal: controller.signal,
     })
@@ -78,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+    const text = data.content?.[0]?.text?.trim()
     if (!text) {
       return Response.json({ error: 'Empty LLM response' }, { status: 502 })
     }

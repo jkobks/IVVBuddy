@@ -203,11 +203,11 @@ export default function OverviewPage() {
           </p>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-              <p className="text-sm font-bold text-gray-900">gemini-2.5-flash-lite</p>
+              <p className="text-sm font-bold text-gray-900">claude-haiku-4-5</p>
               <p className="text-xs text-gray-500 mt-1">Modell, server-side via /api/buddy-message</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-              <p className="text-sm font-bold text-gray-900">4 000 ms</p>
+              <p className="text-sm font-bold text-gray-900">7 000 ms</p>
               <p className="text-xs text-gray-500 mt-1">Timeout, danach Fallback-Text</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
