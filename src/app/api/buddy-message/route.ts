@@ -59,7 +59,14 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: BUDDY_SYSTEM_PROMPT }] },
         contents: [{ role: 'user', parts: [{ text: buildBuddyUserPrompt(ctx) }] }],
-        generationConfig: { maxOutputTokens: 200, temperature: 0.7 },
+        generationConfig: {
+          maxOutputTokens: 200,
+          temperature: 0.7,
+          // Ohne dies verbrennt das Modell einen Großteil von maxOutputTokens auf internes
+          // "Thinking" und schneidet den sichtbaren Text ab (finishReason: MAX_TOKENS).
+          // Für einen kurzen Hinweissatz ist Thinking unnötig — spart auch Latenz.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
       signal: controller.signal,
     })
