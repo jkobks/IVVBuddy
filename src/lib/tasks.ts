@@ -2,8 +2,6 @@ export interface Task {
   id: string
   scenario: string
   question: string
-  // Kurzes Themenlabel, wird als Kontext an die LLM-Nachrichtengenerierung übergeben (nie an den Client für Suchvorschläge zur Antwort selbst)
-  topic: string
 }
 
 export const TASKS: Task[] = [
@@ -11,25 +9,21 @@ export const TASKS: Task[] = [
     id: 'kollagen',
     scenario: 'Eine Bekannte erzählt dir, sie nehme seit drei Monaten Kollagen-Pulver weil es angeblich Falten reduziert. Du bist skeptisch.',
     question: 'Gibt es wissenschaftliche Belege dafür? Würdest du es ihr empfehlen?',
-    topic: 'Kollagen gegen Falten',
   },
   {
     id: 'apfelessig',
     scenario: 'Ein Freund will Apfelessig pur trinken, weil er gehört hat, das helfe beim Abnehmen.',
     question: 'Was würdest du ihm raten?',
-    topic: 'Apfelessig zum Abnehmen',
   },
   {
     id: 'zucker',
     scenario: 'In deiner Familie diskutiert man ob Zucker Kinder hyperaktiv macht. Deine Tante ist überzeugt davon, dein Cousin hält es für einen Mythos.',
     question: 'Wer hat eher recht?',
-    topic: 'Zucker und Hyperaktivität bei Kindern',
   },
   {
     id: 'blaulicht',
     scenario: 'Du überlegst dir eine Blaulichtfilter-Brille zu kaufen weil du viel am Bildschirm arbeitest. Ein Kollege sagt das sei rausgeworfenes Geld.',
     question: 'Lohnt sich die Anschaffung?',
-    topic: 'Blaulichtfilter-Brille',
   },
 ]
 

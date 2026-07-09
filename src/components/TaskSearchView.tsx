@@ -115,14 +115,8 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
   )
 
   const handleInterventionFired = useCallback(
-    (
-      type: TriggerType,
-      wasShown: boolean,
-      messageText: string | null,
-      wasDynamic: boolean,
-      generationTimeMs: number | null
-    ) => {
-      tracker.trackIntervention(type, wasShown, messageText, wasDynamic, generationTimeMs)
+    (type: TriggerType, wasShown: boolean, messageText: string | null) => {
+      tracker.trackIntervention(type, wasShown, messageText)
     },
     [tracker]
   )
@@ -148,9 +142,6 @@ export function TaskSearchView({ task, taskPosition, sessionId, condition, isLas
       <BuddyContainer
         condition={condition}
         latestTrigger={latestTrigger}
-        taskTopic={task.topic}
-        queryHistory={queryHistory}
-        clickHistory={clickHistory}
         onTriggerConsumed={handleTriggerConsumed}
         onInterventionFired={handleInterventionFired}
       />
