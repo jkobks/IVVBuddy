@@ -1,16 +1,39 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from '@/hooks/useSession'
 import { TaskSearchView } from '@/components/TaskSearchView'
 import { TransitionScreen } from '@/components/TransitionScreen'
 import { DoneScreen } from '@/components/DoneScreen'
+import { ConsentScreen } from '@/components/ConsentScreen'
 import { getTaskById, TASKS } from '@/lib/tasks'
 
 type TaskPhase = 'searching' | 'transition' | 'done'
 
+const KEY_CONSENT = 'sb_consent'
+
 export default function SearchPage() {
   const { sessionId, condition, taskOrder, taskIndex, advanceTask, ready } = useSession()
   const [taskPhase, setTaskPhase] = useState<TaskPhase>('searching')
+  const [consented, setConsented] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false)
+
+  useEffect(() => {
+    setConsented(sessionStorage.getItem(KEY_CONSENT) === '1')
+    setConsentChecked(true)
+  }, [])
+
+  if (!consentChecked) return null
+
+  if (!consented) {
+    return (
+      <ConsentScreen
+        onAccept={() => {
+          sessionStorage.setItem(KEY_CONSENT, '1')
+          setConsented(true)
+        }}
+      />
+    )
+  }
 
   if (!ready) return null
 
