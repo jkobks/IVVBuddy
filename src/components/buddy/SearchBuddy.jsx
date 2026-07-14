@@ -144,9 +144,9 @@ export function SearchBuddy({ message, visible }) {
               boxShadow: glowing
                 ? '0 10px 36px rgba(59,130,246,0.35), 0 8px 32px rgba(0,0,0,0.18)'
                 : '0 8px 32px rgba(0,0,0,0.18)',
-              border: glowing ? '1.5px solid #93c5fd' : '1.5px solid #e5e7eb',
-              padding: '14px 36px 14px 16px',
-              width: '300px',
+              border: glowing ? '2px solid #93c5fd' : '2px solid #e5e7eb',
+              padding: '20px 44px 20px 22px',
+              width: '400px',
               position: 'relative',
               transition: 'box-shadow 0.4s ease, border-color 0.4s ease',
             }}>
@@ -155,10 +155,10 @@ export function SearchBuddy({ message, visible }) {
                 aria-label="Schließen"
                 style={{
                   position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  width: '18px',
-                  height: '18px',
+                  top: '10px',
+                  right: '10px',
+                  width: '22px',
+                  height: '22px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -166,7 +166,7 @@ export function SearchBuddy({ message, visible }) {
                   border: 'none',
                   cursor: 'pointer',
                   color: '#9ca3af',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   borderRadius: '50%',
                   padding: 0,
                   lineHeight: 1,
@@ -174,7 +174,7 @@ export function SearchBuddy({ message, visible }) {
               >
                 ✕
               </button>
-              <p style={{ margin: 0, fontSize: '14px', color: '#374151', lineHeight: '1.6' }}>
+              <p style={{ margin: 0, fontSize: '18px', color: '#374151', lineHeight: '1.6' }}>
                 {message}
               </p>
             </div>
