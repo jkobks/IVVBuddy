@@ -149,7 +149,7 @@ function StatsSection({ stats }: { stats: ReturnType<typeof computeStats> }) {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-          <p className="text-xs text-gray-500 mt-1">Sessions gesamt</p>
+          <p className="text-xs text-gray-500 mt-1">Teilnehmer gesamt</p>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
           <p className="text-2xl font-bold text-gray-900">{stats.completed}</p>
@@ -313,12 +313,18 @@ export default async function ResultsPage({
   const interventionRows = (interventions.data ?? []) as InterventionRow[]
   const cancelRows = (answerCancels.data ?? []) as AnswerCancelRow[]
 
+  const participantNumberBySessionId = new Map(
+    [...sessionRows]
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .map((s, i) => [s.id, i + 1])
+  )
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Auswertung</h1>
-          <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Session(s)</p>
+          <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Teilnehmer</p>
         </div>
 
         {sessionRows.length > 0 && (
@@ -342,6 +348,7 @@ export default async function ResultsPage({
           return (
             <div key={session.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <div className="p-5 border-b border-gray-100 flex flex-wrap items-center gap-3">
+                <span className="text-sm font-bold text-gray-900">Teilnehmer {participantNumberBySessionId.get(session.id)}</span>
                 <span
                   className={`text-xs font-semibold px-2 py-1 rounded-full ${
                     session.condition === 'buddy' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
