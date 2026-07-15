@@ -11,7 +11,7 @@ export function IntroScreen({ condition, onContinue }: Props) {
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
       <div className="max-w-xl w-full mx-auto">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          <h1 className="text-xl font-bold text-gray-900 mb-4">So läuft's ab</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-4">So läuft&apos;s ab</h1>
 
           <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
             <p>
