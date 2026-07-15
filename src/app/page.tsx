@@ -5,20 +5,24 @@ import { TaskSearchView } from '@/components/TaskSearchView'
 import { TransitionScreen } from '@/components/TransitionScreen'
 import { DoneScreen } from '@/components/DoneScreen'
 import { ConsentScreen } from '@/components/ConsentScreen'
+import { IntroScreen } from '@/components/IntroScreen'
 import { getTaskById, TASKS } from '@/lib/tasks'
 
 type TaskPhase = 'searching' | 'transition' | 'done'
 
 const KEY_CONSENT = 'sb_consent'
+const KEY_INTRO_SEEN = 'sb_intro_seen'
 
 export default function SearchPage() {
   const { sessionId, condition, taskOrder, taskIndex, advanceTask, ready } = useSession()
   const [taskPhase, setTaskPhase] = useState<TaskPhase>('searching')
   const [consented, setConsented] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
+  const [introSeen, setIntroSeen] = useState(false)
 
   useEffect(() => {
     setConsented(sessionStorage.getItem(KEY_CONSENT) === '1')
+    setIntroSeen(sessionStorage.getItem(KEY_INTRO_SEEN) === '1')
     setConsentChecked(true)
   }, [])
 
@@ -36,6 +40,18 @@ export default function SearchPage() {
   }
 
   if (!ready) return null
+
+  if (!introSeen) {
+    return (
+      <IntroScreen
+        condition={condition}
+        onContinue={() => {
+          sessionStorage.setItem(KEY_INTRO_SEEN, '1')
+          setIntroSeen(true)
+        }}
+      />
+    )
+  }
 
   const currentTask = getTaskById(taskOrder[taskIndex])
   if (!currentTask) return null
