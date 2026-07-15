@@ -63,6 +63,178 @@ interface AnswerCancelRow {
   timestamp: string
 }
 
+const TRIGGER_TYPES: TriggerType[] = [
+  'top1_bias',
+  'query_stagnation',
+  'single_domain',
+  'quick_decision',
+  'struggling',
+  'snippet_only',
+  'no_refinement',
+]
+
+function avg(nums: number[]) {
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
+}
+
+function fmtSeconds(s: number | null) {
+  if (s == null) return '—'
+  return s < 60 ? `${s.toFixed(0)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
+}
+
+function computeStats(
+  sessionRows: SessionRow[],
+  taskSessionRows: TaskSessionRow[],
+  queryRows: QueryRow[],
+  clickRows: ClickRow[],
+  interventionRows: InterventionRow[],
+  cancelRows: AnswerCancelRow[]
+) {
+  const conditions = ['buddy', 'control'] as const
+
+  const byCondition = conditions.map(condition => {
+    const sessionsInCondition = sessionRows.filter(s => s.condition === condition)
+    const ids = new Set(sessionsInCondition.map(s => s.id))
+    const completed = sessionsInCondition.filter(s => s.end_time)
+    const taskCount = taskSessionRows.filter(t => ids.has(t.session_id)).length || 1
+
+    return {
+      condition,
+      n: sessionsInCondition.length,
+      completed: completed.length,
+      avgSessionDurationSec: avg(
+        completed.map(s => (new Date(s.end_time!).getTime() - new Date(s.start_time).getTime()) / 1000)
+      ),
+      avgQueriesPerTask: queryRows.filter(q => ids.has(q.session_id)).length / taskCount,
+      avgClicksPerTask: clickRows.filter(c => ids.has(c.session_id)).length / taskCount,
+      avgDwellSeconds: avg(
+        clickRows.filter(c => ids.has(c.session_id) && c.dwell_time_seconds != null).map(c => c.dwell_time_seconds!)
+      ),
+      avgCancelsPerSession: cancelRows.filter(c => ids.has(c.session_id)).length / (sessionsInCondition.length || 1),
+    }
+  })
+
+  const triggerStats = TRIGGER_TYPES.map(type => {
+    const rows = interventionRows.filter(iv => iv.trigger_type === type)
+    return {
+      type,
+      total: rows.length,
+      shown: rows.filter(r => r.was_shown).length,
+      buddy: rows.filter(r => sessionRows.find(s => s.id === r.session_id)?.condition === 'buddy').length,
+      control: rows.filter(r => sessionRows.find(s => s.id === r.session_id)?.condition === 'control').length,
+    }
+  })
+
+  const dynamicInterventions = interventionRows.filter(iv => iv.was_dynamic)
+
+  return {
+    total: sessionRows.length,
+    completed: sessionRows.filter(s => s.end_time).length,
+    byCondition,
+    triggerStats,
+    llm: {
+      dynamicCount: dynamicInterventions.length,
+      avgGenerationMs: avg(dynamicInterventions.map(iv => iv.generation_time_ms ?? 0).filter(ms => ms > 0)),
+    },
+  }
+}
+
+function StatsSection({ stats }: { stats: ReturnType<typeof computeStats> }) {
+  const dropoutRate = stats.total ? Math.round(((stats.total - stats.completed) / stats.total) * 100) : 0
+
+  return (
+    <section className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6">
+      <h2 className="font-semibold text-gray-900">Übersicht</h2>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+          <p className="text-xs text-gray-500 mt-1">Sessions gesamt</p>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-gray-900">{stats.completed}</p>
+          <p className="text-xs text-gray-500 mt-1">abgeschlossen</p>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-gray-900">{dropoutRate}%</p>
+          <p className="text-xs text-gray-500 mt-1">Dropout-Rate</p>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">Buddy vs. Control</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-400 border-b border-gray-100">
+                <th className="py-1 pr-3 font-medium"></th>
+                <th className="py-1 pr-3 font-medium">n</th>
+                <th className="py-1 pr-3 font-medium">abgeschlossen</th>
+                <th className="py-1 pr-3 font-medium">Ø Dauer/Session</th>
+                <th className="py-1 pr-3 font-medium">Ø Queries/Task</th>
+                <th className="py-1 pr-3 font-medium">Ø Klicks/Task</th>
+                <th className="py-1 pr-3 font-medium">Ø Dwell</th>
+                <th className="py-1 font-medium">Ø Abbrüche/Session</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.byCondition.map(c => (
+                <tr key={c.condition} className="border-b border-gray-50">
+                  <td className="py-1.5 pr-3">
+                    <span className={`font-semibold ${c.condition === 'buddy' ? 'text-blue-700' : 'text-gray-700'}`}>
+                      {c.condition}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 text-gray-700">{c.n}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{c.completed}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgSessionDurationSec)}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{c.avgQueriesPerTask.toFixed(1)}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{c.avgClicksPerTask.toFixed(1)}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgDwellSeconds)}</td>
+                  <td className="py-1.5 text-gray-700">{c.avgCancelsPerSession.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">Trigger-Häufigkeit</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-400 border-b border-gray-100">
+                <th className="py-1 pr-3 font-medium">Trigger</th>
+                <th className="py-1 pr-3 font-medium">gesamt</th>
+                <th className="py-1 pr-3 font-medium">angezeigt</th>
+                <th className="py-1 pr-3 font-medium">buddy</th>
+                <th className="py-1 font-medium">control</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.triggerStats.map(t => (
+                <tr key={t.type} className="border-b border-gray-50">
+                  <td className="py-1.5 pr-3"><code className="text-gray-700">{t.type}</code></td>
+                  <td className="py-1.5 pr-3 text-gray-700">{t.total}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{t.shown}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{t.buddy}</td>
+                  <td className="py-1.5 text-gray-700">{t.control}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800">
+        LLM-generierte Nachrichten: {stats.llm.dynamicCount}
+        {stats.llm.avgGenerationMs != null && <span> · Ø Generierungszeit {stats.llm.avgGenerationMs.toFixed(0)}ms</span>}
+      </div>
+    </section>
+  )
+}
+
 function fmtTime(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'medium' })
@@ -148,6 +320,12 @@ export default async function ResultsPage({
           <h1 className="text-2xl font-bold text-gray-900">Auswertung</h1>
           <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Session(s)</p>
         </div>
+
+        {sessionRows.length > 0 && (
+          <StatsSection
+            stats={computeStats(sessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows)}
+          />
+        )}
 
         {sessionRows.length === 0 && (
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-sm text-gray-500">
