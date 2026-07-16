@@ -73,6 +73,16 @@ const TRIGGER_TYPES: TriggerType[] = [
   'no_refinement',
 ]
 
+const REQUIRED_TASK_COUNT = 4
+
+function isSessionComplete(session: SessionRow, answerRows: AnswerRow[]) {
+  const requiredTasks = session.task_order?.length || REQUIRED_TASK_COUNT
+  const answeredTaskIds = new Set(
+    answerRows.filter(a => a.session_id === session.id && a.task_id).map(a => a.task_id)
+  )
+  return answeredTaskIds.size >= requiredTasks
+}
+
 function avg(nums: number[]) {
   return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
 }
@@ -88,14 +98,15 @@ function computeStats(
   queryRows: QueryRow[],
   clickRows: ClickRow[],
   interventionRows: InterventionRow[],
-  cancelRows: AnswerCancelRow[]
+  cancelRows: AnswerCancelRow[],
+  answerRows: AnswerRow[]
 ) {
   const conditions = ['buddy', 'control'] as const
 
   const byCondition = conditions.map(condition => {
     const sessionsInCondition = sessionRows.filter(s => s.condition === condition)
     const ids = new Set(sessionsInCondition.map(s => s.id))
-    const completed = sessionsInCondition.filter(s => s.end_time)
+    const completed = sessionsInCondition.filter(s => isSessionComplete(s, answerRows))
     const taskCount = taskSessionRows.filter(t => ids.has(t.session_id)).length || 1
 
     return {
@@ -103,7 +114,9 @@ function computeStats(
       n: sessionsInCondition.length,
       completed: completed.length,
       avgSessionDurationSec: avg(
-        completed.map(s => (new Date(s.end_time!).getTime() - new Date(s.start_time).getTime()) / 1000)
+        completed
+          .filter(s => s.end_time)
+          .map(s => (new Date(s.end_time!).getTime() - new Date(s.start_time).getTime()) / 1000)
       ),
       avgQueriesPerTask: queryRows.filter(q => ids.has(q.session_id)).length / taskCount,
       avgClicksPerTask: clickRows.filter(c => ids.has(c.session_id)).length / taskCount,
@@ -125,17 +138,11 @@ function computeStats(
     }
   })
 
-  const dynamicInterventions = interventionRows.filter(iv => iv.was_dynamic)
-
   return {
     total: sessionRows.length,
-    completed: sessionRows.filter(s => s.end_time).length,
+    completed: sessionRows.filter(s => isSessionComplete(s, answerRows)).length,
     byCondition,
     triggerStats,
-    llm: {
-      dynamicCount: dynamicInterventions.length,
-      avgGenerationMs: avg(dynamicInterventions.map(iv => iv.generation_time_ms ?? 0).filter(ms => ms > 0)),
-    },
   }
 }
 
@@ -227,10 +234,6 @@ function StatsSection({ stats }: { stats: ReturnType<typeof computeStats> }) {
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800">
-        LLM-generierte Nachrichten: {stats.llm.dynamicCount}
-        {stats.llm.avgGenerationMs != null && <span> · Ø Generierungszeit {stats.llm.avgGenerationMs.toFixed(0)}ms</span>}
-      </div>
     </section>
   )
 }
@@ -329,7 +332,7 @@ export default async function ResultsPage({
 
         {sessionRows.length > 0 && (
           <StatsSection
-            stats={computeStats(sessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows)}
+            stats={computeStats(sessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows)}
           />
         )}
 
@@ -359,7 +362,7 @@ export default async function ResultsPage({
                 <code className="text-xs text-gray-400">{session.id.slice(0, 8)}</code>
                 <span className="text-xs text-gray-500">{fmtTime(session.start_time)}</span>
                 <span className="text-xs text-gray-400">→ Dauer gesamt: {fmtDuration(session.start_time, session.end_time)}</span>
-                {!session.end_time && (
+                {!isSessionComplete(session, answerRows) && (
                   <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">läuft / abgebrochen</span>
                 )}
               </div>
@@ -421,7 +424,6 @@ export default async function ResultsPage({
                                 }`}
                               >
                                 <code>{iv.trigger_type}</code> · {iv.was_shown ? 'angezeigt' : 'nicht angezeigt'}
-                                {iv.was_dynamic && <span> · LLM ({iv.generation_time_ms?.toFixed(0)}ms)</span>}
                                 {iv.message_text && <div className="mt-0.5 italic">&bdquo;{iv.message_text}&ldquo;</div>}
                               </li>
                             ))}
