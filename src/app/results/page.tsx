@@ -11,6 +11,7 @@ interface SessionRow {
   task_order: string[]
   start_time: string
   end_time: string | null
+  reloaded: boolean
 }
 
 interface TaskSessionRow {
@@ -146,12 +147,19 @@ function computeStats(
   }
 }
 
-function StatsSection({ stats }: { stats: ReturnType<typeof computeStats> }) {
+function StatsSection({ stats, reloadedCount }: { stats: ReturnType<typeof computeStats>; reloadedCount: number }) {
   const dropoutRate = stats.total ? Math.round(((stats.total - stats.completed) / stats.total) * 100) : 0
 
   return (
     <section className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6">
       <h2 className="font-semibold text-gray-900">Übersicht</h2>
+      {reloadedCount > 0 && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {reloadedCount} Session{reloadedCount === 1 ? '' : 's'} mit Reload wurden aus den folgenden Aggregat-Stats
+          ausgeschlossen (Trigger-Historie/Timer nach Reload nicht mehr verlässlich) — unten in der Einzelansicht aber
+          weiterhin mit &bdquo;reloaded&ldquo;-Badge sichtbar.
+        </p>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
@@ -322,17 +330,39 @@ export default async function ResultsPage({
       .map((s, i) => [s.id, i + 1])
   )
 
+  // Reloaded sessions lost their cross-task trigger history and their quick_decision
+  // timer mid-study (see migration 007) — excluded from the aggregate stats below,
+  // still shown (with a badge) in the per-session listing.
+  const cleanSessionRows = sessionRows.filter(s => !s.reloaded)
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Auswertung</h1>
-          <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Teilnehmer</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Auswertung</h1>
+            <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Teilnehmer</p>
+          </div>
+          <div className="flex gap-2">
+            <a
+              href="/api/admin/export"
+              className="text-xs font-medium bg-gray-900 text-white rounded-lg px-3 py-2 hover:bg-gray-700 transition-colors"
+            >
+              CSV Export (pro Task)
+            </a>
+            <a
+              href="/api/admin/export-aggregated"
+              className="text-xs font-medium bg-gray-100 text-gray-700 rounded-lg px-3 py-2 hover:bg-gray-200 transition-colors"
+            >
+              CSV Export (aggregiert)
+            </a>
+          </div>
         </div>
 
         {sessionRows.length > 0 && (
           <StatsSection
-            stats={computeStats(sessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows)}
+            stats={computeStats(cleanSessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows)}
+            reloadedCount={sessionRows.length - cleanSessionRows.length}
           />
         )}
 
@@ -364,6 +394,11 @@ export default async function ResultsPage({
                 <span className="text-xs text-gray-400">→ Dauer gesamt: {fmtDuration(session.start_time, session.end_time)}</span>
                 {!isSessionComplete(session, answerRows) && (
                   <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">läuft / abgebrochen</span>
+                )}
+                {session.reloaded && (
+                  <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full" title="Reload im selben Tab erkannt — aus Aggregat-Stats ausgeschlossen">
+                    reloaded
+                  </span>
                 )}
               </div>
 

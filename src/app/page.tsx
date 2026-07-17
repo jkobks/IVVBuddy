@@ -8,7 +8,7 @@ import { DoneScreen } from '@/components/DoneScreen'
 import { ConsentScreen } from '@/components/ConsentScreen'
 import { IntroScreen } from '@/components/IntroScreen'
 import { getTaskById, TASKS } from '@/lib/tasks'
-import type { ClickRecord, TriggerType } from '@/types'
+import type { ClickRecord, QueryRecord, TriggerType } from '@/types'
 
 type TaskPhase = 'searching' | 'transition' | 'done'
 
@@ -25,21 +25,37 @@ export default function SearchPage() {
   // Cross-task (session-wide) history for the 5 task-übergreifende Trigger
   // (top3_bias, query_stagnation, single_domain, struggling, no_refinement).
   // Accumulates across all 4 tasks — never resets on task change.
-  const [queryHistory, setQueryHistory] = useState<string[]>([])
+  const [queryHistory, setQueryHistory] = useState<QueryRecord[]>([])
   const [clickHistory, setClickHistory] = useState<ClickRecord[]>([])
   const [bounceCount, setBounceCount] = useState(0)
-  const [sessionTrigger, setSessionTrigger] = useState<TriggerType | null>(null)
+  // Queue, not a single slot: if two cross-task conditions become true from the same
+  // event (e.g. a click completes both top3_bias and single_domain at once), both
+  // usePatternDetector effects call handleSessionTrigger in the same tick. A single
+  // `sessionTrigger` value would let the second overwrite the first before TaskSearchView
+  // ever reads it, silently dropping (and never logging) the first trigger.
+  const [sessionTriggerQueue, setSessionTriggerQueue] = useState<TriggerType[]>([])
+  const sessionTrigger = sessionTriggerQueue[0] ?? null
 
-  const handleSessionTrigger = useCallback((type: TriggerType) => setSessionTrigger(type), [])
+  const handleSessionTrigger = useCallback(
+    (type: TriggerType) => setSessionTriggerQueue((prev) => [...prev, type]),
+    []
+  )
   usePatternDetector(queryHistory, clickHistory, bounceCount, handleSessionTrigger)
 
-  const handleQuery = useCallback((q: string) => setQueryHistory((prev) => [...prev, q]), [])
+  const handleQuery = useCallback(
+    (q: string, queryTaskPosition: number) =>
+      setQueryHistory((prev) => [...prev, { text: q, taskPosition: queryTaskPosition }]),
+    []
+  )
   const handleResultClick = useCallback(
     (record: ClickRecord) => setClickHistory((prev) => [...prev, record]),
     []
   )
   const handleBounce = useCallback(() => setBounceCount((c) => c + 1), [])
-  const handleSessionTriggerConsumed = useCallback(() => setSessionTrigger(null), [])
+  const handleSessionTriggerConsumed = useCallback(
+    () => setSessionTriggerQueue((prev) => prev.slice(1)),
+    []
+  )
 
   useEffect(() => {
     setConsented(sessionStorage.getItem(KEY_CONSENT) === '1')

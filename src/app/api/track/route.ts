@@ -26,12 +26,20 @@ export async function POST(request: NextRequest) {
         task_order: body.taskOrder,
         start_time: body.startTime,
       }))
+    } else if (type === 'session_reloaded') {
+      logIfError('session_reloaded', await supabase
+        .from('sessions')
+        .update({ reloaded: true })
+        .eq('id', body.sessionId))
     } else if (type === 'session_end') {
       logIfError('session_end', await supabase
         .from('sessions')
         .update({ end_time: body.endTime })
         .eq('id', body.sessionId))
     } else if (type === 'task_start') {
+      // ignoreDuplicates: a remount (task switch OR a reload mid-task) calls this again
+      // for the same (session_id, task_id) row — only the first call may set
+      // task_start_time; later calls must not overwrite the original start time.
       logIfError('task_start', await supabase.from('task_sessions').upsert(
         {
           session_id: body.sessionId,
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
           task_position: body.taskPosition,
           task_start_time: body.timestamp,
         },
-        { onConflict: 'session_id,task_id' }
+        { onConflict: 'session_id,task_id', ignoreDuplicates: true }
       ))
     } else if (type === 'task_end') {
       logIfError('task_end', await supabase

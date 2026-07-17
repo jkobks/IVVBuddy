@@ -79,10 +79,11 @@ clickHistory.length >= 2 && clickHistory.every(c => c.rank <= 3)
 
 **Scope:** Task-übergreifend
 
-**Bedingung:** Die letzte und die vorletzte Query (session-weit, unabhängig davon in welcher Task sie gestellt wurden) haben eine Jaccard-Ähnlichkeit ≥ 0.5.
+**Bedingung:** Die letzte und die vorletzte Query (session-weite Historie) haben eine Jaccard-Ähnlichkeit ≥ 0.5 — aber nur, wenn beide aus derselben Task stammen. Ist die aktuelle Query die erste Query einer neuen Task, wird sie nicht gegen die letzte Query der vorherigen Task geprüft.
 
 ```
-jaccardSimilarity(queryHistory[n-1], queryHistory[n-2]) >= 0.5
+last.taskPosition === prev.taskPosition &&
+jaccardSimilarity(queryHistory[n-1].text, queryHistory[n-2].text) >= 0.5
 ```
 
 **Nachricht:** „Du suchst schon ähnlich — ein ganz anderer Begriff könnte neue Ergebnisse bringen."
@@ -279,7 +280,7 @@ In **beiden** Bedingungen werden alle 7 Trigger-Bedingungen kontinuierlich ausge
 
 ## Gültigkeitskriterium (valid_task)
 
-Eine Task gilt als gültig, wenn:
+Berechnet in `src/lib/task-metrics.ts` (`computeTaskMetrics`). Eine Task gilt als gültig, wenn:
 - Mindestens 1 Query wurde abgeschickt
 - Eine Antwort wurde eingereicht
 - `task_end_time - task_start_time >= 20 Sekunden`
@@ -290,11 +291,20 @@ Eine Person kann 3 gültige und 1 ungültige Task haben — bei der Auswertung p
 
 ## CSV-Export
 
-**Pro-Task-Export** (`/api/admin/export`): eine Zeile pro Task-Durchlauf — 4 Zeilen pro Person.
+Beide Export-Routen liegen hinter derselben Passwort-Auth wie `/results` (Cookie `results_auth`) und werden in `src/lib/task-metrics.ts` berechnet.
+
+**Pro-Task-Export** (`GET /api/admin/export`): eine Zeile pro Task-Durchlauf — 4 Zeilen pro Person.
 
 Spalten: `session_id`, `condition`, `task_id`, `task_position`, `task_start_time`, `task_end_time`, `time_on_task_s`, `query_count`, `click_count`, `unique_domains`, `top1_click_ratio`, `query_diversity_mean`, `interventions_shown`, `answer_text`, `valid_task`
 
-**Aggregierter Export** (`/api/admin/export-aggregated`): eine Zeile pro Person, Metriken als Mittelwert über die 4 Tasks.
+- `top1_click_ratio`: Anteil der Klicks in dieser Task auf Rang 1 (`null` bei 0 Klicks) — eine deskriptive Metrik, nicht zu verwechseln mit dem `top3_bias`-Trigger (Rang 1-3).
+- `query_diversity_mean`: Mittelwert der Unähnlichkeit (`1 - Jaccard`) zwischen aufeinanderfolgenden Queries dieser Task (`null` bei < 2 Queries) — höher heißt mehr Vokabular-Variation zwischen den Suchanfragen.
+
+**Aggregierter Export** (`GET /api/admin/export-aggregated`): eine Zeile pro Person.
+
+Spalten: `session_id`, `condition`, `reloaded`, `n_tasks`, `n_valid_tasks`, `avg_time_on_task_s`, `avg_query_count`, `avg_click_count`, `avg_unique_domains`, `avg_top1_click_ratio`, `avg_query_diversity_mean`, `avg_interventions_shown` — jede `avg_*`-Spalte ist der Mittelwert über die Tasks, in denen die Metrik nicht `null` war.
+
+Beide CSVs lassen sich auch direkt über Buttons oben auf `/results` herunterladen.
 
 ---
 
@@ -317,6 +327,7 @@ GOOGLE_CSE_ID=...
 # supabase/migrations/004_answer_cancels.sql
 # supabase/migrations/005_dynamic_buddy_messages.sql
 # supabase/migrations/006_rename_top1_to_top3_bias.sql
+# supabase/migrations/007_session_reloaded_flag.sql
 
 # Entwicklungsserver starten
 npm run dev

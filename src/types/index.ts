@@ -23,6 +23,14 @@ export interface ClickRecord {
   title: string
 }
 
+export interface QueryRecord {
+  text: string
+  // Which task this query was submitted in — lets query_stagnation (cross-task
+  // history) require both compared queries to be from the same task, instead of
+  // firing on the boundary between one task's last query and the next task's first.
+  taskPosition: number
+}
+
 export interface PendingClick {
   result: SearchResult
   clickTime: number

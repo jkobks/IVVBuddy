@@ -27,7 +27,7 @@ interface Props {
   onTaskComplete: () => void
   // Cross-task (session-wide) history lives in the parent (SearchPage) — these
   // report each query/click/bounce event upward so the session-level detector sees them.
-  onQuery: (query: string) => void
+  onQuery: (query: string, taskPosition: number) => void
   onResultClick: (record: ClickRecord) => void
   onBounce: () => void
   // The parent's session-level detector relays its (at-most-once-per-session) trigger here.
@@ -61,20 +61,34 @@ export function TaskSearchView({
 
   const { query, setQuery, results, isLoading, error, executeSearch } = useSearch()
   const tracker = useTracker(sessionId, task.id, taskPosition)
+  // Kept in sync every render so the unmount-cleanup below (empty dep array) can
+  // always reach the latest tracker without re-registering the cleanup on every render.
+  const trackerRef = useRef(tracker)
+  trackerRef.current = tracker
 
   const [taskQueryCount, setTaskQueryCount] = useState(0)
   const [taskClickCount, setTaskClickCount] = useState(0)
-  const [latestTrigger, setLatestTrigger] = useState<TriggerType | null>(null)
+  // Queue instead of a single slot: several trigger conditions can become true in the
+  // same tick (a relayed cross-task trigger arriving the same moment a per-task trigger
+  // fires locally). A single `latestTrigger` value would let one silently overwrite the
+  // other before BuddyContainer ever sees it. Every queued type is guaranteed to reach
+  // BuddyContainer exactly once and get logged (was_shown=true or false).
+  const [triggerQueue, setTriggerQueue] = useState<TriggerType[]>([])
+  const latestTrigger = triggerQueue[0] ?? null
+
+  const enqueueTrigger = useCallback((type: TriggerType) => {
+    setTriggerQueue((prev) => [...prev, type])
+  }, [])
 
   useEffect(() => {
     tracker.trackTaskStart()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Relay a cross-task trigger from the parent's session-level detector.
+  // Relay a cross-task trigger from the parent's session-level detector into our queue.
   useEffect(() => {
     if (sessionTrigger) {
-      setLatestTrigger(sessionTrigger)
+      enqueueTrigger(sessionTrigger)
       onSessionTriggerConsumed()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,9 +102,47 @@ export function TaskSearchView({
       taskClickCount === 0
     ) {
       snippetOnlyFiredRef.current = true
-      setLatestTrigger('snippet_only')
+      enqueueTrigger('snippet_only')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskQueryCount, taskClickCount])
+
+  // Flush whatever click is still pending when this task view goes away (answer
+  // submitted, task changed) — otherwise the last click of a task never reaches the DB.
+  useEffect(() => {
+    return () => {
+      if (pendingClickRef.current) {
+        const dwell = (Date.now() - pendingClickRef.current.clickTime) / 1000
+        trackerRef.current.trackClick(pendingClickRef.current.result, dwell)
+        pendingClickRef.current = null
+      }
+    }
+  }, [])
+
+  // Flush via sendBeacon on tab close/reload — a normal fetch can be aborted mid-flight
+  // when the page unloads, sendBeacon is designed to survive that.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!pendingClickRef.current) return
+      const dwellTimeSeconds = (Date.now() - pendingClickRef.current.clickTime) / 1000
+      const { result } = pendingClickRef.current
+      const payload = JSON.stringify({
+        type: 'click',
+        sessionId,
+        taskId: task.id,
+        taskPosition,
+        url: result.url,
+        domain: result.displayLink,
+        rank: result.rank,
+        dwellTimeSeconds,
+        timestamp: new Date().toISOString(),
+      })
+      navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }))
+      pendingClickRef.current = null
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [sessionId, task.id, taskPosition])
 
   function flushPendingClick(dwellSeconds: number | null) {
     if (!pendingClickRef.current) return
@@ -110,11 +162,11 @@ export function TaskSearchView({
       await executeSearch(q)
       const wordCount = q.trim().split(/\s+/).filter(Boolean).length
       setTaskQueryCount((c) => c + 1)
-      onQuery(q)
+      onQuery(q, taskPosition)
       tracker.trackQuery(q, wordCount)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [executeSearch, tracker, onQuery]
+    [executeSearch, tracker, onQuery, taskPosition]
   )
 
   const handleResultClick = useCallback(
@@ -142,7 +194,7 @@ export function TaskSearchView({
     const tooFast = Date.now() - taskStartTime.current < QUICK_DECISION_THRESHOLD_MS
     const tooFewClicks = taskClickCount <= QUICK_DECISION_MAX_CLICKS
     if (tooFast || tooFewClicks) {
-      setLatestTrigger('quick_decision')
+      enqueueTrigger('quick_decision')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskClickCount])
@@ -168,7 +220,7 @@ export function TaskSearchView({
   )
 
   const handleTriggerConsumed = useCallback(() => {
-    setLatestTrigger(null)
+    setTriggerQueue((prev) => prev.slice(1))
   }, [])
 
   return (

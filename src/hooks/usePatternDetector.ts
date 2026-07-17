@@ -11,13 +11,13 @@ import {
   NO_REFINEMENT_LOOKBACK,
   NO_REFINEMENT_MAX_WORDS,
 } from '@/lib/constants'
-import type { ClickRecord, TriggerType } from '@/types'
+import type { ClickRecord, QueryRecord, TriggerType } from '@/types'
 
 // Detects the 5 task-übergreifende (cross-task) triggers. queryHistory/clickHistory/
 // bounceCount are accumulated over the whole session by the caller, and each trigger
 // type fires at most once per session (firedRef never resets here).
 export function usePatternDetector(
-  queryHistory: string[],
+  queryHistory: QueryRecord[],
   clickHistory: ClickRecord[],
   bounceCount: number,
   onTrigger: (type: TriggerType) => void
@@ -36,12 +36,15 @@ export function usePatternDetector(
     }
   }
 
-  // Trigger 2 — Query-Stagnation
+  // Trigger 2 — Query-Stagnation (nur innerhalb derselben Task vergleichen — sonst
+  // würde die letzte Query von Task N gegen die erste Query von Task N+1 geprüft und
+  // direkt zu Task-Beginn feuern)
   useEffect(() => {
     if (queryHistory.length < 2) return
     const last = queryHistory[queryHistory.length - 1]
     const prev = queryHistory[queryHistory.length - 2]
-    if (jaccardSimilarity(last, prev) >= STAGNATION_THRESHOLD) {
+    if (last.taskPosition !== prev.taskPosition) return
+    if (jaccardSimilarity(last.text, prev.text) >= STAGNATION_THRESHOLD) {
       fire('query_stagnation')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,7 +81,7 @@ export function usePatternDetector(
     if (queryHistory.length < NO_REFINEMENT_LOOKBACK) return
     const recent = queryHistory.slice(-NO_REFINEMENT_LOOKBACK)
     const allShort = recent.every(
-      (q) => q.trim().split(/\s+/).filter(Boolean).length <= NO_REFINEMENT_MAX_WORDS
+      (q) => q.text.trim().split(/\s+/).filter(Boolean).length <= NO_REFINEMENT_MAX_WORDS
     )
     if (allShort) {
       fire('no_refinement')
