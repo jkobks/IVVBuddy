@@ -11,10 +11,10 @@ interface DemoTrigger {
 
 const DEMO_TRIGGERS: DemoTrigger[] = [
   { type: 'top3_bias', label: 'Top-3 Bias', condition: '≥ 2 Klicks insgesamt, alle auf Rang 1-3 (task-übergreifend)' },
-  { type: 'query_stagnation', label: 'Query-Stagnation', condition: 'zwei aufeinanderfolgende Suchanfragen zu ähnlich (Jaccard ≥ 0.5, task-übergreifend)' },
+  { type: 'query_stagnation', label: 'Query-Stagnation', condition: 'letzte 2 Suchanfragen zu ähnlich (Jaccard ≥ 0.5) und aus derselben Task (task-übergreifend gezählt)' },
   { type: 'single_domain', label: 'Single Domain', condition: '≥ 3 Klicks insgesamt, ≥ 70% zur selben Domain (task-übergreifend)' },
   { type: 'quick_decision', label: 'Quick Decision', condition: 'Antwortformular < 45s nach Task-Start ODER ≤ 1 Klick in dieser Task (pro Task)' },
-  { type: 'struggling', label: 'Struggling / Bounce', condition: '2 Klicks mit Verweildauer < 5s (task-übergreifend)' },
+  { type: 'struggling', label: 'Struggling / Bounce', condition: '2 Bounces: Dwell-Zeit < 5s nach Klick (task-übergreifend)' },
   { type: 'snippet_only', label: 'Snippet-only', condition: '3+ Suchanfragen in dieser Task, aber noch nie geklickt (pro Task)' },
   { type: 'no_refinement', label: 'Fehlende Begriffsverfeinerung', condition: 'letzte 2 Suchanfragen (task-übergreifend) je max. 2 Wörter' },
 ]
