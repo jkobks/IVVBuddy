@@ -21,7 +21,9 @@ export function BuddyContainer({
   const [activeMessage, setActiveMessage] = useState('')
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // All three counters reset on remount (i.e., on each task change via key prop)
+  // All three counters reset on remount (i.e., on each task change via key prop) —
+  // the 3-per-task limit, 20s cooldown, and once-per-trigger-per-task rule apply
+  // uniformly, whether the underlying trigger condition is cross-task or per-task.
   const interventionCount = useRef(0)
   const lastShownTime = useRef<number>(0)
   const evaluatedTriggers = useRef<Set<TriggerType>>(new Set())

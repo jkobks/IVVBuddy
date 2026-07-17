@@ -64,7 +64,7 @@ interface AnswerCancelRow {
 }
 
 const TRIGGER_TYPES: TriggerType[] = [
-  'top1_bias',
+  'top3_bias',
   'query_stagnation',
   'single_domain',
   'quick_decision',

@@ -3,15 +3,19 @@ import { useEffect, useRef } from 'react'
 import { jaccardSimilarity } from '@/lib/similarity'
 import {
   STAGNATION_THRESHOLD,
-  TOP1_CONSECUTIVE_THRESHOLD,
-  SINGLE_DOMAIN_THRESHOLD,
+  TOP_BIAS_MIN_CLICKS,
+  TOP_BIAS_MAX_RANK,
+  SINGLE_DOMAIN_MIN_CLICKS,
+  SINGLE_DOMAIN_RATIO,
   STRUGGLING_BOUNCE_COUNT,
-  SNIPPET_ONLY_QUERY_THRESHOLD,
-  NO_REFINEMENT_QUERY_THRESHOLD,
+  NO_REFINEMENT_LOOKBACK,
   NO_REFINEMENT_MAX_WORDS,
 } from '@/lib/constants'
 import type { ClickRecord, TriggerType } from '@/types'
 
+// Detects the 5 task-übergreifende (cross-task) triggers. queryHistory/clickHistory/
+// bounceCount are accumulated over the whole session by the caller, and each trigger
+// type fires at most once per session (firedRef never resets here).
 export function usePatternDetector(
   queryHistory: string[],
   clickHistory: ClickRecord[],
@@ -43,16 +47,18 @@ export function usePatternDetector(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryHistory])
 
-  // Trigger 1 — Top-1 Bias, Trigger 3 — Single Domain
+  // Trigger 1 — Top-3 Bias, Trigger 3 — Single Domain
   useEffect(() => {
-    if (clickHistory.length < TOP1_CONSECUTIVE_THRESHOLD) return
-    const recent = clickHistory.slice(-TOP1_CONSECUTIVE_THRESHOLD)
-    if (recent.every((c) => c.rank === 1)) {
-      fire('top1_bias')
+    if (clickHistory.length >= TOP_BIAS_MIN_CLICKS && clickHistory.every((c) => c.rank <= TOP_BIAS_MAX_RANK)) {
+      fire('top3_bias')
     }
-    if (clickHistory.length >= SINGLE_DOMAIN_THRESHOLD) {
-      const domains = new Set(clickHistory.map((c) => c.domain))
-      if (domains.size === 1) {
+    if (clickHistory.length >= SINGLE_DOMAIN_MIN_CLICKS) {
+      const counts = new Map<string, number>()
+      for (const c of clickHistory) {
+        counts.set(c.domain, (counts.get(c.domain) ?? 0) + 1)
+      }
+      const maxCount = Math.max(...counts.values())
+      if (maxCount / clickHistory.length >= SINGLE_DOMAIN_RATIO) {
         fire('single_domain')
       }
     }
@@ -67,18 +73,11 @@ export function usePatternDetector(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bounceCount])
 
-  // Trigger 6 — Snippet-only Verhalten
+  // Trigger 7 — Fehlende Begriffsverfeinerung (nur letzte 2 Queries, session-weit)
   useEffect(() => {
-    if (queryHistory.length >= SNIPPET_ONLY_QUERY_THRESHOLD && clickHistory.length === 0) {
-      fire('snippet_only')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryHistory, clickHistory])
-
-  // Trigger 7 — Fehlende Begriffsverfeinerung
-  useEffect(() => {
-    if (queryHistory.length < NO_REFINEMENT_QUERY_THRESHOLD) return
-    const allShort = queryHistory.every(
+    if (queryHistory.length < NO_REFINEMENT_LOOKBACK) return
+    const recent = queryHistory.slice(-NO_REFINEMENT_LOOKBACK)
+    const allShort = recent.every(
       (q) => q.trim().split(/\s+/).filter(Boolean).length <= NO_REFINEMENT_MAX_WORDS
     )
     if (allShort) {

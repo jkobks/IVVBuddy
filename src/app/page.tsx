@@ -1,12 +1,14 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '@/hooks/useSession'
+import { usePatternDetector } from '@/hooks/usePatternDetector'
 import { TaskSearchView } from '@/components/TaskSearchView'
 import { TransitionScreen } from '@/components/TransitionScreen'
 import { DoneScreen } from '@/components/DoneScreen'
 import { ConsentScreen } from '@/components/ConsentScreen'
 import { IntroScreen } from '@/components/IntroScreen'
 import { getTaskById, TASKS } from '@/lib/tasks'
+import type { ClickRecord, TriggerType } from '@/types'
 
 type TaskPhase = 'searching' | 'transition' | 'done'
 
@@ -19,6 +21,25 @@ export default function SearchPage() {
   const [consented, setConsented] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
   const [introSeen, setIntroSeen] = useState(false)
+
+  // Cross-task (session-wide) history for the 5 task-übergreifende Trigger
+  // (top3_bias, query_stagnation, single_domain, struggling, no_refinement).
+  // Accumulates across all 4 tasks — never resets on task change.
+  const [queryHistory, setQueryHistory] = useState<string[]>([])
+  const [clickHistory, setClickHistory] = useState<ClickRecord[]>([])
+  const [bounceCount, setBounceCount] = useState(0)
+  const [sessionTrigger, setSessionTrigger] = useState<TriggerType | null>(null)
+
+  const handleSessionTrigger = useCallback((type: TriggerType) => setSessionTrigger(type), [])
+  usePatternDetector(queryHistory, clickHistory, bounceCount, handleSessionTrigger)
+
+  const handleQuery = useCallback((q: string) => setQueryHistory((prev) => [...prev, q]), [])
+  const handleResultClick = useCallback(
+    (record: ClickRecord) => setClickHistory((prev) => [...prev, record]),
+    []
+  )
+  const handleBounce = useCallback(() => setBounceCount((c) => c + 1), [])
+  const handleSessionTriggerConsumed = useCallback(() => setSessionTrigger(null), [])
 
   useEffect(() => {
     setConsented(sessionStorage.getItem(KEY_CONSENT) === '1')
@@ -77,8 +98,9 @@ export default function SearchPage() {
     )
   }
 
-  // key={taskIndex} remounts TaskSearchView on each task, resetting all behavioral
-  // state so that triggers evaluate within-task only — which is what they were designed for.
+  // key={taskIndex} remounts TaskSearchView (and its BuddyContainer) on each task,
+  // resetting within-task UI state, the per-task triggers, and the intervention
+  // limit/cooldown/fired-set — but NOT the cross-task history above, which lives here.
   return (
     <TaskSearchView
       key={taskIndex}
@@ -91,6 +113,11 @@ export default function SearchPage() {
         if (isLastTask) setTaskPhase('done')
         else setTaskPhase('transition')
       }}
+      onQuery={handleQuery}
+      onResultClick={handleResultClick}
+      onBounce={handleBounce}
+      sessionTrigger={sessionTrigger}
+      onSessionTriggerConsumed={handleSessionTriggerConsumed}
     />
   )
 }

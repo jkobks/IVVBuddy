@@ -5,6 +5,7 @@ import type { TriggerType } from '@/types'
 const TRIGGERS: {
   type: TriggerType
   title: string
+  scope: 'Task-übergreifend' | 'Pro Task'
   condition: string
   detail: string
   note?: string
@@ -12,16 +13,18 @@ const TRIGGERS: {
   reasoningCaveat?: string
 }[] = [
   {
-    type: 'top1_bias',
-    title: 'Top-1 Bias',
-    condition: 'Letzte 2 Klicks waren beide Rang 1',
-    detail: 'clickHistory.slice(-2).every(c => c.rank === 1)',
-    reasoning: 'Nutzer verlassen sich übermäßig auf das erstgereihte Ergebnis als kognitive Abkürzung (Position Bias). Rieh (2002) zeigt, dass Ranking-Position die Selektionsentscheidung beeinflusst; das Aufbrechen dieses Musters fördert breitere Informationsbetrachtung.',
+    type: 'top3_bias',
+    title: 'Top-3 Bias',
+    scope: 'Task-übergreifend',
+    condition: 'Mindestens 2 Klicks insgesamt, und alle bisherigen Klicks waren auf Rang 1-3',
+    detail: 'clickHistory.length >= 2 && clickHistory.every(c => c.rank <= 3)',
+    reasoning: 'Nutzer verlassen sich übermäßig auf die obersten Ränge als kognitive Abkürzung (Position Bias). Rieh (2002) zeigt, dass Ranking-Position die Selektionsentscheidung beeinflusst; das Aufbrechen dieses Musters fördert breitere Informationsbetrachtung.',
   },
   {
     type: 'query_stagnation',
     title: 'Query-Stagnation',
-    condition: 'Letzte 2 Queries sind ≥ 50 % ähnlich (Jaccard-Ähnlichkeit)',
+    scope: 'Task-übergreifend',
+    condition: 'Letzte 2 Queries (session-weit, unabhängig von der Task) sind ≥ 50 % ähnlich (Jaccard-Ähnlichkeit)',
     detail: 'jaccardSimilarity(last, prev) ≥ 0.5',
     note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (Trigger). "kollagen studie" vs. "apfelessig abnehmen" → 0/4 = 0,0 (kein Trigger). Ab 0,5 gilt die Query als zu ähnlich zur vorherigen.',
     reasoning: 'Wiederholtes Suchen mit minimal variierten Begriffen deutet auf fehlende Reformulierungsstrategie hin. Harvey et al. (2015) zeigen, dass effektive Sucher ihr Vokabular variieren und erweitern.',
@@ -29,22 +32,25 @@ const TRIGGERS: {
   {
     type: 'single_domain',
     title: 'Single Domain',
-    condition: 'Alle Klicks (≥ 3) gehen zur selben Domain',
-    detail: 'new Set(clickHistory.map(c => c.domain)).size === 1',
-    reasoning: 'Ausschließliche Nutzung einer Quellendomäne widerspricht dem Prinzip des lateral reading und erhöht Einseitigkeit. Das Vergleichen mehrerer Quellen ist ein Kernmerkmal kompetenter Informationsbewertung (vgl. Bink et al. 2026, Tip 4).',
+    scope: 'Task-übergreifend',
+    condition: 'Mindestens 3 Klicks insgesamt, und die häufigste Domain macht ≥ 70 % aller Klicks aus',
+    detail: 'gesamtKlicks >= 3 && (maxKlicksEinerDomain / gesamtKlicks) >= 0.7',
+    reasoning: 'Ausschließliche bzw. dominante Nutzung einer Quellendomäne widerspricht dem Prinzip des lateral reading und erhöht Einseitigkeit. Das Vergleichen mehrerer Quellen ist ein Kernmerkmal kompetenter Informationsbewertung (vgl. Bink et al. 2026, Tip 4). Einseitige Quellennutzung zeigt sich oft erst über mehrere Suchen hinweg, daher task-übergreifend.',
   },
   {
     type: 'quick_decision',
     title: 'Schnellentscheidung',
-    condition: 'Antwortformular < 45 s nach Task-Start geöffnet',
-    detail: 'Date.now() − taskStartTime < 45 000 ms',
+    scope: 'Pro Task',
+    condition: 'Beim Öffnen des Antwortformulars: weniger als 45 s seit Task-Start ODER höchstens 1 Ergebnis in dieser Task geöffnet',
+    detail: '(Date.now() - taskStartTime < 45_000) || (clicksInCurrentTask <= 1)',
     note: 'Evaluation beim Öffnen des Formulars (nicht beim Abschicken) — damit der Nutzer nach dem Buddy-Hinweis zurückgehen und weitersuchen kann. Geht er zurück ("Abbrechen"), wird das als answer_cancel geloggt. So lässt sich auswerten: Hat der Buddy jemanden dazu gebracht, doch nochmal zu suchen?',
-    reasoning: 'Vorzeitige Entscheidungen nach sehr kurzer Recherche deuten auf heuristikgetriebenes statt reflektiertes Suchen hin. Die Intervention beim Öffnen des Antwortformulars gibt dem Nutzer die Möglichkeit, die Entscheidung zu überdenken (vgl. Dual-Process-Theorie; das answer_cancel-Maß erfasst, ob dies gelingt).',
+    reasoning: 'Vorzeitige/oberflächliche Entscheidungen nach zu kurzer Zeit ODER zu wenig Quellen deuten auf heuristikgetriebenes statt reflektiertes Suchen hin. Die Intervention beim Öffnen des Antwortformulars gibt dem Nutzer die Möglichkeit, die Entscheidung zu überdenken (vgl. Dual-Process-Theorie; das answer_cancel-Maß erfasst, ob dies gelingt).',
   },
   {
     type: 'struggling',
     title: 'Struggling',
-    condition: '2 Bounces: Dwell-Zeit < 5 s nach Klick',
+    scope: 'Task-übergreifend',
+    condition: '2 Bounces: Dwell-Zeit < 5 s nach Klick, gezählt über die gesamte Session',
     detail: 'bounceCount ≥ 2 (dwell < 5 s pro Klick)',
     reasoning: 'Schnelles Zurückspringen von Ergebnissen (kurze Dwell-Zeit) ohne Erfolg signalisiert Struggling statt zielgerichtetem Explorieren. Hassan et al. (2014) unterscheiden zwischen "struggling" und "exploring" in Suchsessions.',
     reasoningCaveat: 'DOI dieser Quelle muss noch verifiziert werden.',
@@ -52,15 +58,17 @@ const TRIGGERS: {
   {
     type: 'snippet_only',
     title: 'Snippet-only',
-    condition: '3+ Queries abgeschickt, aber 0 Klicks',
-    detail: 'queryHistory.length ≥ 3 && clickHistory.length === 0',
+    scope: 'Pro Task',
+    condition: 'In der aktuellen Task: 3+ Queries abgeschickt, aber 0 Klicks',
+    detail: 'taskQueryCount >= 3 && taskClickCount === 0',
     reasoning: 'Ausschließliches Lesen von Snippets ohne Öffnen der Originalseite führt zu oberflächlichem Verständnis, da Snippets ein unvollständiges Bild geben können. Reaktive Variante zu Bink et al. (2026), Tip 3.',
   },
   {
     type: 'no_refinement',
     title: 'Keine Begriffsverfeinerung',
-    condition: 'Alle Queries (≥ 3) bestehen aus ≤ 2 Wörtern',
-    detail: 'queryHistory.every(q => wordCount(q) ≤ 2)',
+    scope: 'Task-übergreifend',
+    condition: 'Die letzten 2 abgeschickten Queries (session-weit) bestehen beide aus ≤ 2 Wörtern',
+    detail: 'letzteZweiQueries.length === 2 && letzteZweiQueries.every(q => wordCount(q) <= 2)',
     reasoning: 'Durchgehend sehr kurze Queries (≤ 2 Wörter) deuten auf fehlende Spezifizierung hin. Harvey et al. (2015) zeigen, dass Experten-Queries tendenziell länger und spezifischer sind; Elsweiler (2026) rahmt dies als Boosting-Ansatz.',
   },
 ]
@@ -165,9 +173,28 @@ export default function OverviewPage() {
               </div>
             ))}
           </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 space-y-1">
-            <p className="text-xs font-medium text-blue-800">Verhaltenshistorie resettet pro Task</p>
-            <p className="text-xs text-blue-700">Query-Historie, Click-Historie, Bounce-Count, Interventions-Zähler, Cooldown-Timer und die Liste bereits gefeuerter Trigger starten in jedem Task bei null. Die Trigger wurden für die Auswertung innerhalb einer Suche designed — eine Task-übergreifende Akkumulierung würde Trigger wie snippet_only oder single_domain nach Task 1 dauerhaft deaktivieren. Wer dasselbe Muster in mehreren Tasks zeigt, bekommt die Nachricht trotzdem jedes Mal.</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 space-y-2">
+            <p className="text-xs font-medium text-blue-800">Zwei getrennte Historien: Task-übergreifend vs. pro Task</p>
+            <p className="text-xs text-blue-700">
+              Die meisten Trigger (<code>top3_bias</code>, <code>query_stagnation</code>, <code>single_domain</code>,{' '}
+              <code>struggling</code>, <code>no_refinement</code>) zählen <strong>task-übergreifend</strong>: Query-Historie,
+              Click-Historie und Bounce-Count akkumulieren über die gesamte Session und resetten bei Task-Wechsel nicht.
+              Der Buddy betrachtet damit das gesamte bisherige Suchverhalten einer Person, nicht nur die aktuelle Aufgabe —
+              jeder dieser Trigger feuert deshalb maximal einmal pro Session.
+            </p>
+            <p className="text-xs text-blue-700">
+              <code>snippet_only</code> und <code>quick_decision</code> zählen bewusst <strong>pro Task</strong> und resetten
+              bei jedem Task-Wechsel: Die 0-Klick-Bedingung von snippet_only würde sonst nach dem allerersten Klick der
+              gesamten Session dauerhaft brechen und könnte nie wieder feuern; quick_decision ist an die Startzeit der
+              jeweiligen Task gebunden und muss daher pro Task neu bewertet werden.
+            </p>
+            <p className="text-xs text-blue-700">
+              Unverändert für <strong>alle</strong> Trigger — unabhängig von dieser Unterscheidung: das Interventions-Limit
+              (max. 3 angezeigte pro Task), die Regel &bdquo;1× pro Trigger pro Task&ldquo; und der 20-Sekunden-Cooldown. Diese
+              Zähler leben in <code>BuddyContainer</code>, das bei jedem Task-Wechsel neu gemountet wird (<code>key=&#123;taskIndex&#125;</code>),
+              während die task-übergreifende Historie in der übergeordneten <code>SearchPage</code>-Komponente lebt, die
+              über die ganze Session bestehen bleibt.
+            </p>
           </div>
           <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 space-y-1">
             <p className="text-xs font-medium text-green-800">Begründung für Limit + Cooldown</p>
@@ -192,7 +219,12 @@ export default function OverviewPage() {
             {TRIGGERS.map((t, i) => (
               <div key={t.type} className="border border-gray-100 rounded-xl p-4 space-y-3">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-gray-400 font-medium">Trigger {i + 1} · <code className="bg-gray-100 px-1 rounded">{t.type}</code></p>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${t.scope === 'Task-übergreifend' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {t.scope}
+                    </span>
+                  </div>
                   <p className="font-semibold text-gray-900 mt-0.5">{t.title}</p>
                   <p className="text-sm text-gray-600 mt-1">{t.condition}</p>
                   <code className="text-xs text-gray-400 mt-1 block">{t.detail}</code>

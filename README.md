@@ -35,43 +35,54 @@ Task 1 → Suchinterface → Antwort abgeben → Zwischenseite → Task 2 → �
 
 ## Buddy Trigger-Logik
 
-Jeder Trigger feuert maximal **einmal pro Task**. Trigger-Zustand, Interventions-Zähler und Cooldown-Timer werden bei jedem Task-Wechsel zurückgesetzt (durch Re-Mount der `TaskSearchView`-Komponente via `key={taskIndex}`, was `BuddyContainer` mit-remounted).
+Es gibt 7 Trigger, die sich in **zwei Historien** aufteilen:
 
-### Interventions-Limit pro Task
+- **Task-übergreifend** (`top3_bias`, `query_stagnation`, `single_domain`, `struggling`, `no_refinement`): Query-Historie, Click-Historie und Bounce-Count akkumulieren über die **gesamte Session** und resetten bei Task-Wechsel **nicht**. Diese Historie lebt in `SearchPage` (`src/app/page.tsx`), die über alle 4 Tasks hinweg bestehen bleibt. Jeder dieser Trigger feuert dadurch **maximal einmal pro Session**.
+- **Pro Task** (`snippet_only`, `quick_decision`): Die zugrunde liegende Query-/Click-Zählung resettet bei **jedem Task-Wechsel** und lebt lokal in `TaskSearchView` (remounted via `key={taskIndex}`).
+
+**Warum diese beiden bewusst pro Task bleiben:**
+- `snippet_only` prüft „0 Klicks in dieser Task" — würde diese Bedingung task-übergreifend gezählt, würde sie nach dem allerersten Klick der gesamten Session dauerhaft brechen und könnte nie wieder feuern.
+- `quick_decision` ist an die Startzeit der jeweiligen Task gebunden und muss daher pro Task neu bewertet werden.
+
+**Unverändert für alle 7 Trigger** — unabhängig von der Historie-Zuordnung oben:
 
 - Maximal **3 angezeigte Interventionen pro Task**
-- Jeder Trigger-Typ feuert **maximal einmal pro Task**
+- Jeder Trigger-Typ feuert **maximal einmal pro Task** (diese Regel ist für die task-übergreifenden Trigger meist automatisch erfüllt, da sie ohnehin nur einmal pro Session feuern)
 - Zwischen zwei **angezeigten** Interventionen gilt ein **Cooldown von 20 Sekunden**
-- Bei Task-Wechsel werden Interventions-Zähler, Cooldown-Timer und die Liste bereits gefeuerter Trigger zurückgesetzt
+- Bei Task-Wechsel werden Interventions-Zähler, Cooldown-Timer und die pro-Task-Liste bereits gefeuerter Trigger zurückgesetzt (`BuddyContainer` wird mit `TaskSearchView` re-mounted)
 - Trigger, die wegen Limit **oder** Cooldown nicht angezeigt werden, werden trotzdem mit `was_shown=false` (inkl. `trigger_type` und `timestamp`) in der `interventions`-Tabelle geloggt — Datenverlust in der Auswertung wird so vermieden
 - Sind mehrere Bedingungen gleichzeitig erfüllt, wird der zuerst erkannte Trigger angezeigt; die anderen werden ebenfalls mit `was_shown=false` geloggt
 
 **Begründung:** Das Limit von 3 Interventionen pro Task und der 20-Sekunden-Cooldown verhindern „Overprompting". Mudrick et al. zeigen, dass eine hohe Interventionsfrequenz eines pädagogischen Agenten Langeweile vorhersagt und die Autonomie des Nutzers untergräbt. *(DOI dieser Quelle muss noch verifiziert werden.)*
 
-Die Trigger-Erkennung läuft in `src/hooks/usePatternDetector.ts`. Die Anzeige-Entscheidung (inkl. Limit/Cooldown) liegt in `src/components/buddy/BuddyContainer.tsx`.
+Die task-übergreifende Trigger-Erkennung läuft in `src/hooks/usePatternDetector.ts` (aufgerufen aus `src/app/page.tsx`). Die pro-Task-Trigger (`snippet_only`, `quick_decision`) werden direkt in `src/components/TaskSearchView.tsx` ausgewertet. Die Anzeige-Entscheidung (inkl. Limit/Cooldown) liegt in beiden Fällen in `src/components/buddy/BuddyContainer.tsx`.
 
 ---
 
-### Trigger 1 — Top-1 Bias
+### Trigger 1 — Top-3 Bias
 
-**Bedingung:** Die letzten 2 Klicks innerhalb des Tasks haben jeweils Rang 1.
+**Scope:** Task-übergreifend
+
+**Bedingung:** Mindestens 2 Klicks insgesamt (über die gesamte Session), und alle bisherigen Klicks waren auf Rang 1-3.
 
 ```
-clickHistory.slice(-2).every(c => c.rank === 1)
+clickHistory.length >= 2 && clickHistory.every(c => c.rank <= 3)
 ```
 
-**Nachricht:** „Du hast direkt das erste Ergebnis geöffnet — weiter unten stehen oft andere Perspektiven."
+**Nachricht:** „Du klickst vor allem auf die obersten Ergebnisse — weiter unten stehen oft andere Perspektiven."
 
-**Begründung:** Nutzer verlassen sich übermäßig auf das erstgereihte Ergebnis als kognitive Abkürzung (Position Bias). Rieh (2002) zeigt, dass Ranking-Position die Selektionsentscheidung beeinflusst; das Aufbrechen dieses Musters fördert breitere Informationsbetrachtung.
+**Begründung:** Nutzer verlassen sich übermäßig auf die obersten Ränge als kognitive Abkürzung (Position Bias). Rieh (2002) zeigt, dass Ranking-Position die Selektionsentscheidung beeinflusst; das Aufbrechen dieses Musters fördert breitere Informationsbetrachtung.
 
 ---
 
 ### Trigger 2 — Query-Stagnation
 
-**Bedingung:** Die letzte und die vorletzte Query haben eine Jaccard-Ähnlichkeit ≥ 0.8 (nahezu identische Suchbegriffe).
+**Scope:** Task-übergreifend
+
+**Bedingung:** Die letzte und die vorletzte Query (session-weit, unabhängig davon in welcher Task sie gestellt wurden) haben eine Jaccard-Ähnlichkeit ≥ 0.5.
 
 ```
-jaccardSimilarity(queryHistory[n-1], queryHistory[n-2]) >= 0.8
+jaccardSimilarity(queryHistory[n-1], queryHistory[n-2]) >= 0.5
 ```
 
 **Nachricht:** „Du suchst schon ähnlich — ein ganz anderer Begriff könnte neue Ergebnisse bringen."
@@ -82,39 +93,45 @@ jaccardSimilarity(queryHistory[n-1], queryHistory[n-2]) >= 0.8
 
 ### Trigger 3 — Single Domain
 
-**Bedingung:** Ab dem 3. Klick: alle bisherigen Klicks innerhalb des Tasks führten zur selben Domain.
+**Scope:** Task-übergreifend
+
+**Bedingung:** Mindestens 3 Klicks insgesamt (über die gesamte Session), und die häufigste Domain macht ≥ 70 % aller Klicks aus.
 
 ```
-clickHistory.length >= 3 &&
-new Set(clickHistory.map(c => c.domain)).size === 1
+const anteil = maxKlicksEinerDomain / gesamtKlicks
+gesamtKlicks >= 3 && anteil >= 0.7
 ```
 
-**Nachricht:** „Du warst bisher auf ähnlichen Seiten — andere Quellen könnten ein anderes Bild zeigen."
+**Nachricht:** „Du bist oft auf derselben Domain gelandet — andere Quellen könnten ein anderes Bild zeigen."
 
-**Begründung:** Ausschließliche Nutzung einer Quellendomäne widerspricht dem Prinzip des lateral reading und erhöht Einseitigkeit. Das Vergleichen mehrerer Quellen ist ein Kernmerkmal kompetenter Informationsbewertung (vgl. Bink et al. 2026, Tip 4).
+**Begründung:** Ausschließliche bzw. dominante Nutzung einer Quellendomäne widerspricht dem Prinzip des lateral reading und erhöht Einseitigkeit. Das Vergleichen mehrerer Quellen ist ein Kernmerkmal kompetenter Informationsbewertung (vgl. Bink et al. 2026, Tip 4). Einseitige Quellennutzung zeigt sich oft erst über mehrere Suchen hinweg — daher task-übergreifend statt pro Task.
 
 ---
 
 ### Trigger 4 — Schnellentscheidung
 
-**Bedingung:** Nutzer öffnet das Antwortformular innerhalb von 45 Sekunden nach Task-Start (jede Task hat eine eigene Startzeit).
+**Scope:** Pro Task
+
+**Bedingung:** Beim Öffnen des Antwortformulars feuert der Trigger, wenn entweder (a) weniger als 45 Sekunden seit Task-Start vergangen sind, oder (b) in dieser Task höchstens 1 Ergebnis geöffnet wurde.
 
 ```
-Date.now() - taskStartTime < 45_000
+(Date.now() - taskStartTime < 45_000) || (clicksInCurrentTask <= 1)
 ```
 
 **Nachricht:** „Das ging schnell — bist du sicher, dass du genug gesehen hast?"
 
-**Begründung:** Vorzeitige Entscheidungen nach sehr kurzer Recherche deuten auf heuristikgetriebenes statt reflektiertes Suchen hin. Die Intervention beim Öffnen des Antwortformulars gibt dem Nutzer die Möglichkeit, die Entscheidung zu überdenken (vgl. Dual-Process-Theorie; das `answer_cancel`-Maß erfasst, ob dies gelingt).
+**Begründung:** Vorzeitige/oberflächliche Entscheidungen nach zu kurzer Zeit ODER zu wenig Quellen deuten auf heuristikgetriebenes statt reflektiertes Suchen hin. Evaluation weiterhin beim Öffnen des Antwortformulars (nicht beim Absenden) — das gibt dem Nutzer die Möglichkeit, die Entscheidung zu überdenken (vgl. Dual-Process-Theorie). Geht er zurück ("Abbrechen"), wird das als `answer_cancel` geloggt; das `answer_cancel`-Maß erfasst, ob die Intervention wirkt.
 
 ---
 
 ### Trigger 5 — Struggling / Bounce-Muster
 
-**Bedingung:** Ein Ergebnis wurde angeklickt und die Verweildauer (dwell_time) war < 5 Sekunden. Dieses Muster tritt **2-mal** innerhalb des Tasks auf.
+**Scope:** Task-übergreifend
+
+**Bedingung:** Ein Ergebnis wurde angeklickt und die Verweildauer (dwell_time) war < 5 Sekunden. Dieses Muster tritt **2-mal** auf — gezählt über die gesamte Session, nicht nur innerhalb eines Tasks.
 
 ```
-dwell < 5s  →  bounceCount++
+dwell < 5s  →  bounceCount++   // session-weit
 bounceCount >= 2  →  Trigger feuert
 ```
 
@@ -126,25 +143,29 @@ bounceCount >= 2  →  Trigger feuert
 
 ### Trigger 6 — Snippet-only Verhalten
 
-**Bedingung:** Mindestens 3 Queries wurden abgeschickt, aber insgesamt 0 Klicks auf Ergebnisse erfolgten.
+**Scope:** Pro Task
+
+**Bedingung:** In der **aktuellen Task** wurden mindestens 3 Queries abgeschickt, aber insgesamt 0 Klicks auf Ergebnisse erfolgten.
 
 ```
-queryHistory.length >= 3 && clickHistory.length === 0
+taskQueryCount >= 3 && taskClickCount === 0
 ```
 
 **Nachricht:** „Du liest bisher nur die Kurzvorschauen — die Originalseite zeigt oft mehr Kontext."
 
-**Begründung:** Ausschließliches Lesen von Snippets ohne Öffnen der Originalseite führt zu oberflächlichem Verständnis, da Snippets ein unvollständiges Bild geben können. Reaktive Variante zu Bink et al. (2026), Tip 3.
+**Begründung:** Ausschließliches Lesen von Snippets ohne Öffnen der Originalseite führt zu oberflächlichem Verständnis, da Snippets ein unvollständiges Bild geben können. Reaktive Variante zu Bink et al. (2026), Tip 3. Pro Task statt task-übergreifend, weil die 0-Klick-Bedingung sonst nach dem ersten Klick der gesamten Session dauerhaft bräche und nie wieder feuern könnte.
 
 ---
 
 ### Trigger 7 — Fehlende Begriffsverfeinerung
 
-**Bedingung:** Mindestens 3 Queries wurden abgeschickt, und **alle** bisherigen Queries bestehen aus höchstens 2 Wörtern.
+**Scope:** Task-übergreifend
+
+**Bedingung:** Die letzten 2 abgeschickten Queries (session-weit, unabhängig von der Task) bestehen **beide** aus höchstens 2 Wörtern.
 
 ```
-queryHistory.length >= 3 &&
-queryHistory.every(q =>
+letzteZweiQueries.length === 2 &&
+letzteZweiQueries.every(q =>
   q.trim().split(/\s+/).filter(Boolean).length <= 2
 )
 ```
@@ -157,21 +178,21 @@ queryHistory.every(q =>
 
 ## Interventions-Logik (Zusammenfassung)
 
-| # | Trigger | Feuert nach … |
-|---|---------|--------------|
-| 1 | Top-1 Bias | 2 aufeinanderfolgenden Rang-1-Klicks |
-| 2 | Query-Stagnation | 2 ähnlichen Queries (Jaccard ≥ 0.8) |
-| 3 | Single Domain | 3 Klicks zur selben Domain |
-| 4 | Schnellentscheidung | Antwortformular < 45 s nach Task-Start |
-| 5 | Struggling | 2 Bounces mit dwell < 5 s |
-| 6 | Snippet-only | 3+ Queries, 0 Klicks |
-| 7 | Fehlende Verfeinerung | 3+ Queries, alle ≤ 2 Wörter |
+| # | Trigger | Scope | Feuert nach … |
+|---|---------|-------|--------------|
+| 1 | Top-3 Bias | Task-übergreifend | ≥ 2 Klicks insgesamt, alle Rang 1-3 |
+| 2 | Query-Stagnation | Task-übergreifend | 2 ähnlichen Queries (Jaccard ≥ 0.5) |
+| 3 | Single Domain | Task-übergreifend | ≥ 3 Klicks insgesamt, ≥ 70 % zur selben Domain |
+| 4 | Schnellentscheidung | Pro Task | Antwortformular < 45 s nach Task-Start ODER ≤ 1 Klick in der Task |
+| 5 | Struggling | Task-übergreifend | 2 Bounces mit dwell < 5 s |
+| 6 | Snippet-only | Pro Task | 3+ Queries in der Task, 0 Klicks in der Task |
+| 7 | Fehlende Verfeinerung | Task-übergreifend | letzte 2 Queries (session-weit), beide ≤ 2 Wörter |
 
 Alle 7 Trigger zeigen einen festen Text (`BUDDY_MESSAGES` in `src/lib/constants.ts`) — es gibt keine dynamische, KI-generierte Formulierung mehr.
 
-**Regeln (pro Task):**
+**Regeln (unverändert für alle Trigger, egal ob Task-übergreifend oder pro Task):**
 - Maximal **3 Interventionen pro Task** werden angezeigt.
-- Jeder Trigger-Typ feuert **einmal pro Task** (bei Task-Wechsel zurückgesetzt).
+- Jeder Trigger-Typ feuert **einmal pro Task** — für Task-übergreifende Trigger bedeutet das faktisch **einmal pro Session**, da ihre zugrunde liegende Bedingung ohnehin nur einmal jemals erfüllt wird.
 - Cooldown von **20 Sekunden** zwischen zwei angezeigten Interventionen.
 - Nach 3 gezeigten Interventionen bleibt der Buddy für den Rest des Tasks inaktiv.
 
@@ -295,6 +316,7 @@ GOOGLE_CSE_ID=...
 # supabase/migrations/003_multi_task.sql
 # supabase/migrations/004_answer_cancels.sql
 # supabase/migrations/005_dynamic_buddy_messages.sql
+# supabase/migrations/006_rename_top1_to_top3_bias.sql
 
 # Entwicklungsserver starten
 npm run dev

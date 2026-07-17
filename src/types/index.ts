@@ -1,7 +1,7 @@
 export type Condition = 'buddy' | 'control'
 
 export type TriggerType =
-  | 'top1_bias'
+  | 'top3_bias'
   | 'query_stagnation'
   | 'single_domain'
   | 'quick_decision'
