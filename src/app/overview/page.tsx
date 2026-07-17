@@ -9,6 +9,7 @@ const TRIGGERS: {
   condition: string
   detail: string
   note?: string
+  example: string
   reasoning: string
   reasoningCaveat?: string
 }[] = [
@@ -18,6 +19,7 @@ const TRIGGERS: {
     scope: 'Task-übergreifend',
     condition: 'Mindestens 2 Klicks insgesamt, und alle bisherigen Klicks waren auf Rang 1-3',
     detail: 'clickHistory.length >= 2 && clickHistory.every(c => c.rank <= 3)',
+    example: 'Bei der Kollagen-Aufgabe öffnet die Person das erste Ergebnis, springt zurück und öffnet das zweite. Beide Treffer standen ganz oben in der Liste. Der Buddy weist darauf hin, dass weiter unten oft andere Perspektiven stehen.',
     reasoning: 'Nutzer verlassen sich übermäßig auf die obersten Ränge als kognitive Abkürzung (Position Bias). Rieh (2002) zeigt, dass Ranking-Position die Selektionsentscheidung beeinflusst; das Aufbrechen dieses Musters fördert breitere Informationsbetrachtung.',
   },
   {
@@ -27,6 +29,7 @@ const TRIGGERS: {
     condition: 'Letzte 2 Queries sind ≥ 50 % ähnlich (Jaccard-Ähnlichkeit) — session-weit gezählt, aber nur wenn beide aus derselben Task stammen',
     detail: 'last.taskPosition === prev.taskPosition && jaccardSimilarity(last, prev) ≥ 0.5',
     note: 'Jaccard misst den Wortüberlapp zweier Texte: |Schnittmenge| ÷ |Vereinigung| der Wörter. Beispiel: "kollagen falten studie" vs. "kollagen falten forschung" → gemeinsame Wörter {kollagen, falten}, alle Wörter {kollagen, falten, studie, forschung} → Jaccard = 2/4 = 0,5 (Trigger). "kollagen studie" vs. "apfelessig abnehmen" → 0/4 = 0,0 (kein Trigger). Ab 0,5 gilt die Query als zu ähnlich zur vorherigen.',
+    example: 'Die Person sucht "Apfelessig abnehmen", schaut kurz auf die Ergebnisse und sucht dann "Apfelessig abnehmen Studie". Die beiden Suchanfragen teilen sich fast alle Wörter — der Buddy schlägt vor, einen ganz anderen Begriff zu probieren.',
     reasoning: 'Wiederholtes Suchen mit minimal variierten Begriffen deutet auf fehlende Reformulierungsstrategie hin. Harvey et al. (2015) zeigen, dass effektive Sucher ihr Vokabular variieren und erweitern.',
   },
   {
@@ -35,6 +38,7 @@ const TRIGGERS: {
     scope: 'Task-übergreifend',
     condition: 'Mindestens 3 Klicks insgesamt, und die häufigste Domain macht ≥ 70 % aller Klicks aus',
     detail: 'gesamtKlicks >= 3 && (maxKlicksEinerDomain / gesamtKlicks) >= 0.7',
+    example: 'Über die Zucker-Aufgabe hinweg öffnet die Person drei Ergebnisse — alle drei von derselben Gesundheitsseite. Der Buddy regt an, auch andere Quellen anzusehen, die ein anderes Bild zeigen könnten.',
     reasoning: 'Ausschließliche bzw. dominante Nutzung einer Quellendomäne widerspricht dem Prinzip des lateral reading und erhöht Einseitigkeit. Das Vergleichen mehrerer Quellen ist ein Kernmerkmal kompetenter Informationsbewertung (vgl. Bink et al. 2026, Tip 4). Einseitige Quellennutzung zeigt sich oft erst über mehrere Suchen hinweg, daher task-übergreifend.',
   },
   {
@@ -44,6 +48,7 @@ const TRIGGERS: {
     condition: 'Beim Öffnen des Antwortformulars: weniger als 45 s seit Task-Start ODER höchstens 1 Ergebnis in dieser Task geöffnet',
     detail: '(Date.now() - taskStartTime < 45_000) || (clicksInCurrentTask <= 1)',
     note: 'Evaluation beim Öffnen des Formulars (nicht beim Abschicken) — damit der Nutzer nach dem Buddy-Hinweis zurückgehen und weitersuchen kann. Geht er zurück ("Abbrechen"), wird das als answer_cancel geloggt. So lässt sich auswerten: Hat der Buddy jemanden dazu gebracht, doch nochmal zu suchen?',
+    example: 'Bei der Blaulichtfilter-Aufgabe klickt die Person ein einziges Ergebnis an und öffnet nach 30 Sekunden schon das Antwortformular. Der Buddy erscheint beim Öffnen des Formulars und fragt, ob sie wirklich schon genug gesehen hat — sie kann noch zurück zur Suche.',
     reasoning: 'Vorzeitige/oberflächliche Entscheidungen nach zu kurzer Zeit ODER zu wenig Quellen deuten auf heuristikgetriebenes statt reflektiertes Suchen hin. Die Intervention beim Öffnen des Antwortformulars gibt dem Nutzer die Möglichkeit, die Entscheidung zu überdenken (vgl. Dual-Process-Theorie; das answer_cancel-Maß erfasst, ob dies gelingt).',
   },
   {
@@ -52,6 +57,7 @@ const TRIGGERS: {
     scope: 'Task-übergreifend',
     condition: '2 Bounces: Dwell-Zeit < 5 s nach Klick, gezählt über die gesamte Session',
     detail: 'bounceCount ≥ 2 (dwell < 5 s pro Klick)',
+    example: 'Die Person öffnet ein Ergebnis, springt nach 3 Sekunden zurück, öffnet das nächste, springt nach 2 Sekunden wieder zurück. Dieses schnelle Hin und Her deutet auf Struggling hin — der Buddy schlägt vor, lieber den Suchbegriff zu ändern als weiter Ergebnisse durchzuklicken.',
     reasoning: 'Schnelles Zurückspringen von Ergebnissen (kurze Dwell-Zeit) ohne Erfolg signalisiert Struggling statt zielgerichtetem Explorieren. Hassan et al. (2014) unterscheiden zwischen "struggling" und "exploring" in Suchsessions.',
     reasoningCaveat: 'DOI dieser Quelle muss noch verifiziert werden.',
   },
@@ -61,6 +67,7 @@ const TRIGGERS: {
     scope: 'Pro Task',
     condition: 'In der aktuellen Task: 3+ Queries abgeschickt, aber 0 Klicks',
     detail: 'taskQueryCount >= 3 && taskClickCount === 0',
+    example: 'Bei der Kollagen-Aufgabe sucht die Person dreimal mit verschiedenen Begriffen, öffnet aber kein einziges Ergebnis — sie liest nur die Kurzvorschauen. Der Buddy weist darauf hin, dass die Originalseite oft mehr Kontext bietet.',
     reasoning: 'Ausschließliches Lesen von Snippets ohne Öffnen der Originalseite führt zu oberflächlichem Verständnis, da Snippets ein unvollständiges Bild geben können. Reaktive Variante zu Bink et al. (2026), Tip 3.',
   },
   {
@@ -69,6 +76,7 @@ const TRIGGERS: {
     scope: 'Task-übergreifend',
     condition: 'Die letzten 2 abgeschickten Queries (session-weit) bestehen beide aus ≤ 2 Wörtern',
     detail: 'letzteZweiQueries.length === 2 && letzteZweiQueries.every(q => wordCount(q) <= 2)',
+    example: 'Die Person sucht nacheinander "Zucker Kinder" und "Zucker hyperaktiv" — beide Suchanfragen bleiben sehr kurz. Der Buddy schlägt vor, mit einem spezifischeren Begriff gezieltere Ergebnisse zu bekommen.',
     reasoning: 'Durchgehend sehr kurze Queries (≤ 2 Wörter) deuten auf fehlende Spezifizierung hin. Harvey et al. (2015) zeigen, dass Experten-Queries tendenziell länger und spezifischer sind; Elsweiler (2026) rahmt dies als Boosting-Ansatz.',
   },
 ]
@@ -234,6 +242,10 @@ export default function OverviewPage() {
                     <p className="text-xs text-amber-800 leading-relaxed">{t.note}</p>
                   </div>
                 )}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                  <p className="text-xs font-medium text-indigo-800 mb-1">Beispiel</p>
+                  <p className="text-xs text-indigo-800 leading-relaxed">{t.example}</p>
+                </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                   <p className="text-xs font-medium text-green-800 mb-1">Wissenschaftliche Begründung</p>
                   <p className="text-xs text-green-800 leading-relaxed">
