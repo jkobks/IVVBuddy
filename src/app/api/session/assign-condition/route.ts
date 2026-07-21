@@ -28,9 +28,9 @@ export async function GET() {
     else if (controlCount < buddyCount) condition = 'control'
     else condition = Math.random() < 0.5 ? 'buddy' : 'control'
 
-    return Response.json({ condition })
+    return Response.json({ condition, _debugBuddyCount: buddyCount, _debugControlCount: controlCount })
   } catch (err) {
     console.error('[assign-condition]', err)
-    return Response.json({ condition: null }, { status: 500 })
+    return Response.json({ condition: null, _debugError: String(err) }, { status: 500 })
   }
 }
