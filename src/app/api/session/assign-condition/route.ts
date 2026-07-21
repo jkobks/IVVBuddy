@@ -3,6 +3,10 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 // Server-balanced condition assignment: counts existing sessions per condition and
 // assigns whichever is underrepresented (random on a tie), instead of a client-side
 // 50/50 coin flip that can drift over a small sample.
+// Must stay dynamic: without this, Next.js can statically cache the response at
+// build/deploy time and keep serving the same condition to every new session.
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const supabase = createAdminSupabaseClient()
