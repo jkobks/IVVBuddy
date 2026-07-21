@@ -9,12 +9,36 @@ const LEAVE_MS = 300
 const DISMISS_MS = 8000
 const GLOW_MS = 2200
 
+// A trigger's sound can end up playing well after the click/keypress that
+// caused it (it now waits for tab focus — see BuddyContainer), by which point
+// the browser's autoplay policy no longer treats it as tied to a user
+// gesture and silently blocks a freshly created AudioContext. Unlocking one
+// eagerly on the page's first real interaction and reusing it sidesteps that.
+let sharedAudioContext = null
+let unlockListenersAttached = false
+
+function unlockSharedAudioContext() {
+  const Ctx = window.AudioContext || window.webkitAudioContext
+  if (!Ctx) return
+  if (!sharedAudioContext) sharedAudioContext = new Ctx()
+  if (sharedAudioContext.state === 'suspended') sharedAudioContext.resume().catch(() => {})
+}
+
+function ensureAudioUnlockListeners() {
+  if (typeof window === 'undefined' || unlockListenersAttached) return
+  unlockListenersAttached = true
+  ;['pointerdown', 'keydown'].forEach((type) =>
+    document.addEventListener(type, unlockSharedAudioContext, { once: true, capture: true })
+  )
+}
+
 // Short, gentle two-note "pop" chime synthesized on the fly — no audio asset needed.
 function playPopSound() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext
     if (!Ctx) return
-    const ctx = new Ctx()
+    const isShared = !!sharedAudioContext
+    const ctx = sharedAudioContext ?? new Ctx()
     if (ctx.state === 'suspended') ctx.resume()
     const now = ctx.currentTime
 
@@ -37,7 +61,11 @@ function playPopSound() {
       osc.stop(now + start + dur + 0.02)
     })
 
-    setTimeout(() => ctx.close(), (notes.at(-1).start + notes.at(-1).dur + 0.3) * 1000)
+    // Only tear down one-off fallback contexts (unlock never happened in time) —
+    // the shared, pre-unlocked context stays alive for the next intervention.
+    if (!isShared) {
+      setTimeout(() => ctx.close(), (notes.at(-1).start + notes.at(-1).dur + 0.3) * 1000)
+    }
   } catch {
     // Audio unsupported or blocked by autoplay policy — fail silently.
   }
@@ -50,6 +78,10 @@ export function SearchBuddy({ message, visible }) {
   const autoTimer = useRef(null)
   const leaveTimer = useRef(null)
   const glowTimer = useRef(null)
+
+  useEffect(() => {
+    ensureAudioUnlockListeners()
+  }, [])
 
   const startLeave = useCallback(() => {
     clearTimeout(autoTimer.current)
