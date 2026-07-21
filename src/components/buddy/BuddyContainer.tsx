@@ -102,22 +102,32 @@ export function BuddyContainer({
 
   // Don't let a trigger fire (and its bubble start counting down) while the
   // participant isn't even looking at the tab — wait for it to regain focus.
+  //
+  // A result click opens the target in a new tab (window.open) synchronously,
+  // but the trigger reaching this component takes several React state hops
+  // (click count -> patternDetector -> session trigger -> queue -> this prop),
+  // each a separate render/effect pass. The browser's own 'visibilitychange'
+  // for the tab going hidden is a race against those hops — on some
+  // browsers/timings this effect can still read 'visible' a beat before the
+  // tab actually flips. The 100ms grace period lets that settle before we
+  // trust the read, instead of checking the instant this effect runs.
   useEffect(() => {
     if (!latestTrigger) return
 
-    if (document.visibilityState === 'visible') {
-      processTrigger(latestTrigger)
-      return
+    let handled = false
+    function tryShow() {
+      if (handled || document.visibilityState !== 'visible') return
+      handled = true
+      document.removeEventListener('visibilitychange', tryShow)
+      processTrigger(latestTrigger!)
     }
 
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-        processTrigger(latestTrigger!)
-      }
+    document.addEventListener('visibilitychange', tryShow)
+    const settleTimer = setTimeout(tryShow, 100)
+    return () => {
+      clearTimeout(settleTimer)
+      document.removeEventListener('visibilitychange', tryShow)
     }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestTrigger, condition])
 
