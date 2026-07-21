@@ -17,16 +17,7 @@ function track(payload: Record<string, unknown>) {
   }).catch(() => {})
 }
 
-// Falls back to a client-side coin flip if the balancing endpoint is unreachable
-// (e.g. DB hiccup) — imbalance from a rare fallback beats blocking the study.
-async function assignBalancedCondition(): Promise<Condition> {
-  try {
-    const res = await fetch('/api/session/assign-condition')
-    const data = await res.json()
-    if (data.condition === 'buddy' || data.condition === 'control') return data.condition
-  } catch {
-    // fall through to client-side random
-  }
+function assignCondition(): Condition {
   return Math.random() < 0.5 ? 'buddy' : 'control'
 }
 
@@ -66,7 +57,7 @@ export function useSession(): SessionHandle {
         condition =
           conditionParam === 'buddy' || conditionParam === 'control'
             ? conditionParam
-            : await assignBalancedCondition()
+            : assignCondition()
         if (cancelled) return
         startTime = Date.now()
 

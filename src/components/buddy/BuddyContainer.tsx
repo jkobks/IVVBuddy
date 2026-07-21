@@ -20,6 +20,10 @@ export function BuddyContainer({
   const [isVisible, setIsVisible] = useState(false)
   const [activeMessage, setActiveMessage] = useState('')
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // While the tab is hidden, the dismiss countdown is paused here (ms left) instead
+  // of ticking down unseen; resumed for the remaining duration once visible again.
+  const pausedRemainingMs = useRef<number | null>(null)
+  const dismissStartedAt = useRef<number>(0)
 
   // All three counters reset on remount (i.e., on each task change via key prop) —
   // the 3-per-task limit, 20s cooldown, and once-per-trigger-per-task rule apply
@@ -39,14 +43,34 @@ export function BuddyContainer({
     }
   }, [])
 
+  // Pause the auto-dismiss countdown while the tab is in the background so a
+  // shown bubble can't expire before the participant ever sees it.
   useEffect(() => {
-    if (!latestTrigger) return
+    function handleVisibilityChange() {
+      if (!isVisible) return
+      if (document.visibilityState === 'hidden') {
+        if (dismissTimer.current) {
+          clearTimeout(dismissTimer.current)
+          dismissTimer.current = null
+        }
+        const elapsed = Date.now() - dismissStartedAt.current
+        pausedRemainingMs.current = Math.max(BUBBLE_DISMISS_MS - elapsed, 0)
+      } else if (pausedRemainingMs.current !== null) {
+        dismissStartedAt.current = Date.now()
+        dismissTimer.current = setTimeout(() => setIsVisible(false), pausedRemainingMs.current)
+        pausedRemainingMs.current = null
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [isVisible])
 
-    if (evaluatedTriggers.current.has(latestTrigger)) {
+  function processTrigger(type: TriggerType) {
+    if (evaluatedTriggers.current.has(type)) {
       onTriggerConsumedRef.current()
       return
     }
-    evaluatedTriggers.current.add(latestTrigger)
+    evaluatedTriggers.current.add(type)
 
     const now = Date.now()
     const cooldownElapsed = now - lastShownTime.current >= INTERVENTION_COOLDOWN_MS
@@ -60,18 +84,40 @@ export function BuddyContainer({
       lastShownTime.current = now
       interventionCount.current++
 
-      const text = BUDDY_MESSAGES[latestTrigger]
+      const text = BUDDY_MESSAGES[type]
       setActiveMessage(text)
       setIsVisible(true)
       if (dismissTimer.current) clearTimeout(dismissTimer.current)
+      pausedRemainingMs.current = null
+      dismissStartedAt.current = now
       dismissTimer.current = setTimeout(() => setIsVisible(false), BUBBLE_DISMISS_MS)
 
-      onInterventionFiredRef.current(latestTrigger, true, text)
+      onInterventionFiredRef.current(type, true, text)
     } else {
-      onInterventionFiredRef.current(latestTrigger, false, null)
+      onInterventionFiredRef.current(type, false, null)
     }
 
     onTriggerConsumedRef.current()
+  }
+
+  // Don't let a trigger fire (and its bubble start counting down) while the
+  // participant isn't even looking at the tab — wait for it to regain focus.
+  useEffect(() => {
+    if (!latestTrigger) return
+
+    if (document.visibilityState === 'visible') {
+      processTrigger(latestTrigger)
+      return
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        processTrigger(latestTrigger!)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestTrigger, condition])
 
