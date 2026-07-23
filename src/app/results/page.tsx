@@ -164,9 +164,9 @@ function StatsSection({
       <h2 className="font-semibold text-gray-900">Übersicht</h2>
       {noConsentCount > 0 && (
         <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-          {noConsentCount} Seitenaufruf{noConsentCount === 1 ? '' : 'e'} ohne erteilten Consent wurden aus Teilnehmerzahl
-          und Stats ausgeschlossen (session_start wird beim Laden der Seite geloggt, noch vor der Consent-Abfrage) —
-          unten in der Einzelansicht weiterhin mit &bdquo;kein Consent&ldquo;-Badge sichtbar.
+          {noConsentCount} Seitenaufruf{noConsentCount === 1 ? '' : 'e'} ohne erteilten Consent wurden aus Teilnehmerzahl,
+          Stats und der Einzelansicht ausgeschlossen (session_start wird beim Laden der Seite geloggt, noch vor der
+          Consent-Abfrage).
         </p>
       )}
       {reloadedCount > 0 && (
@@ -363,6 +363,11 @@ export default async function ResultsPage({
   const cleanSessionRows = consentedSessionRows.filter(s => !s.reloaded)
   const reloadedCount = consentedSessionRows.length - cleanSessionRows.length
 
+  // The per-session list below only shows real, completed participants —
+  // consented sessions still in progress or bounced without consent are
+  // covered by the counts/stats above, not listed individually here.
+  const displaySessionRows = consentedSessionRows.filter(s => isSessionComplete(s, answerRows))
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -400,13 +405,13 @@ export default async function ResultsPage({
           />
         )}
 
-        {sessionRows.length === 0 && (
+        {displaySessionRows.length === 0 && (
           <div className="bg-white border border-gray-200 rounded-2xl p-6 text-sm text-gray-500">
-            Noch keine Sessions vorhanden.
+            Noch keine abgeschlossenen Teilnehmer vorhanden.
           </div>
         )}
 
-        {sessionRows.map(session => {
+        {displaySessionRows.map(session => {
           const sessionTaskSessions = taskSessionRows.filter(t => t.session_id === session.id)
           const orderedTaskIds = session.task_order?.length
             ? session.task_order
@@ -416,9 +421,7 @@ export default async function ResultsPage({
             <div key={session.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <div className="p-5 border-b border-gray-100 flex flex-wrap items-center gap-3">
                 <span className="text-sm font-bold text-gray-900">
-                  {participantNumberBySessionId.has(session.id)
-                    ? `Teilnehmer ${participantNumberBySessionId.get(session.id)}`
-                    : 'Seitenaufruf (kein Consent)'}
+                  Teilnehmer {participantNumberBySessionId.get(session.id)}
                 </span>
                 <span
                   className={`text-xs font-semibold px-2 py-1 rounded-full ${
@@ -430,17 +433,9 @@ export default async function ResultsPage({
                 <code className="text-xs text-gray-400">{session.id.slice(0, 8)}</code>
                 <span className="text-xs text-gray-500">{fmtTime(session.start_time)}</span>
                 <span className="text-xs text-gray-400">→ Dauer gesamt: {fmtDuration(session.start_time, session.end_time)}</span>
-                {!isSessionComplete(session, answerRows) && (
-                  <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">läuft / abgebrochen</span>
-                )}
                 {session.reloaded && (
                   <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full" title="Reload im selben Tab erkannt — aus Aggregat-Stats ausgeschlossen">
                     reloaded
-                  </span>
-                )}
-                {!session.consent_given && (
-                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full" title="Consent nie erteilt — aus Teilnehmerzahl und Stats ausgeschlossen">
-                    kein Consent
                   </span>
                 )}
               </div>
