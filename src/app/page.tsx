@@ -71,6 +71,16 @@ export default function SearchPage() {
         onAccept={() => {
           sessionStorage.setItem(KEY_CONSENT, '1')
           setConsented(true)
+          // Explicit, consent-gated signal for the participant counter on /results —
+          // session_start itself fires on mount, before consent, so it can't be used
+          // to distinguish real participants from bounces/crawlers.
+          if (sessionId) {
+            fetch('/api/track', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'consent', sessionId }),
+            }).catch(() => {})
+          }
         }}
       />
     )

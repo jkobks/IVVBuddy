@@ -12,6 +12,7 @@ interface SessionRow {
   start_time: string
   end_time: string | null
   reloaded: boolean
+  consent_given: boolean
 }
 
 interface TaskSessionRow {
@@ -147,12 +148,27 @@ function computeStats(
   }
 }
 
-function StatsSection({ stats, reloadedCount }: { stats: ReturnType<typeof computeStats>; reloadedCount: number }) {
+function StatsSection({
+  stats,
+  reloadedCount,
+  noConsentCount,
+}: {
+  stats: ReturnType<typeof computeStats>
+  reloadedCount: number
+  noConsentCount: number
+}) {
   const dropoutRate = stats.total ? Math.round(((stats.total - stats.completed) / stats.total) * 100) : 0
 
   return (
     <section className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6">
       <h2 className="font-semibold text-gray-900">Übersicht</h2>
+      {noConsentCount > 0 && (
+        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          {noConsentCount} Seitenaufruf{noConsentCount === 1 ? '' : 'e'} ohne erteilten Consent wurden aus Teilnehmerzahl
+          und Stats ausgeschlossen (session_start wird beim Laden der Seite geloggt, noch vor der Consent-Abfrage) —
+          unten in der Einzelansicht weiterhin mit &bdquo;kein Consent&ldquo;-Badge sichtbar.
+        </p>
+      )}
       {reloadedCount > 0 && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           {reloadedCount} Session{reloadedCount === 1 ? '' : 's'} mit Reload wurden aus den folgenden Aggregat-Stats
@@ -324,16 +340,28 @@ export default async function ResultsPage({
   const interventionRows = (interventions.data ?? []) as InterventionRow[]
   const cancelRows = (answerCancels.data ?? []) as AnswerCancelRow[]
 
+  // Numbered only among consented sessions, so "Teilnehmer N" lines up with the
+  // participant count above — non-consented rows (bounces) get no number, just
+  // the "kein Consent" badge below.
   const participantNumberBySessionId = new Map(
-    [...sessionRows]
+    sessionRows
+      .filter(s => s.consent_given)
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
       .map((s, i) => [s.id, i + 1])
   )
 
+  // Sessions without confirmed consent are page loads/bounces, not participants
+  // (session_start fires on mount, before the consent screen — see migration 008) —
+  // excluded from the participant count and all stats below, still shown (with a
+  // badge) in the per-session listing.
+  const consentedSessionRows = sessionRows.filter(s => s.consent_given)
+  const noConsentCount = sessionRows.length - consentedSessionRows.length
+
   // Reloaded sessions lost their cross-task trigger history and their quick_decision
   // timer mid-study (see migration 007) — excluded from the aggregate stats below,
   // still shown (with a badge) in the per-session listing.
-  const cleanSessionRows = sessionRows.filter(s => !s.reloaded)
+  const cleanSessionRows = consentedSessionRows.filter(s => !s.reloaded)
+  const reloadedCount = consentedSessionRows.length - cleanSessionRows.length
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
@@ -341,7 +369,12 @@ export default async function ResultsPage({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Auswertung</h1>
-            <p className="text-sm text-gray-500 mt-1">{sessionRows.length} Teilnehmer</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {consentedSessionRows.length} Teilnehmer
+              {noConsentCount > 0 && (
+                <span className="text-gray-400"> ({sessionRows.length} Seitenaufrufe insgesamt)</span>
+              )}
+            </p>
           </div>
           <div className="flex gap-2">
             <a
@@ -362,7 +395,8 @@ export default async function ResultsPage({
         {sessionRows.length > 0 && (
           <StatsSection
             stats={computeStats(cleanSessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows)}
-            reloadedCount={sessionRows.length - cleanSessionRows.length}
+            reloadedCount={reloadedCount}
+            noConsentCount={noConsentCount}
           />
         )}
 
@@ -381,7 +415,11 @@ export default async function ResultsPage({
           return (
             <div key={session.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <div className="p-5 border-b border-gray-100 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-bold text-gray-900">Teilnehmer {participantNumberBySessionId.get(session.id)}</span>
+                <span className="text-sm font-bold text-gray-900">
+                  {participantNumberBySessionId.has(session.id)
+                    ? `Teilnehmer ${participantNumberBySessionId.get(session.id)}`
+                    : 'Seitenaufruf (kein Consent)'}
+                </span>
                 <span
                   className={`text-xs font-semibold px-2 py-1 rounded-full ${
                     session.condition === 'buddy' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
@@ -398,6 +436,11 @@ export default async function ResultsPage({
                 {session.reloaded && (
                   <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full" title="Reload im selben Tab erkannt — aus Aggregat-Stats ausgeschlossen">
                     reloaded
+                  </span>
+                )}
+                {!session.consent_given && (
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full" title="Consent nie erteilt — aus Teilnehmerzahl und Stats ausgeschlossen">
+                    kein Consent
                   </span>
                 )}
               </div>

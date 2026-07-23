@@ -26,6 +26,11 @@ export async function POST(request: NextRequest) {
         task_order: body.taskOrder,
         start_time: body.startTime,
       }))
+    } else if (type === 'consent') {
+      logIfError('consent', await supabase
+        .from('sessions')
+        .update({ consent_given: true })
+        .eq('id', body.sessionId))
     } else if (type === 'session_reloaded') {
       logIfError('session_reloaded', await supabase
         .from('sessions')
