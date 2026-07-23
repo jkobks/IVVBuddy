@@ -26,15 +26,27 @@ export async function GET(request: NextRequest) {
     `https://api.search.brave.com/res/v1/web/search` +
     `?q=${encodeURIComponent(q)}&count=10`
 
+  // Brave's Free plan caps at 1 req/sec across the whole API key (not per user) —
+  // with several study participants searching concurrently, momentary 429s are
+  // expected traffic, not a real failure. One retry after a beat clears them.
+  const MAX_ATTEMPTS = 3
+  let res: Response
+  let attempt = 0
   try {
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
-      },
-      next: { revalidate: 0 },
-    })
+    while (true) {
+      attempt++
+      res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip',
+          'X-Subscription-Token': apiKey,
+        },
+        next: { revalidate: 0 },
+      })
+
+      if (res.status !== 429 || attempt >= MAX_ATTEMPTS) break
+      await new Promise((resolve) => setTimeout(resolve, 1100 * attempt))
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
