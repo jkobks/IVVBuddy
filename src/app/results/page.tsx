@@ -264,7 +264,7 @@ function StatsSection({
 
 function fmtTime(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'medium' })
+  return new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Berlin' })
 }
 
 function fmtDuration(startIso: string | null, endIso: string | null) {
