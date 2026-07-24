@@ -13,6 +13,7 @@ const COLUMNS = [
   'task_start_time',
   'task_end_time',
   'time_on_task_s',
+  'answer_time_s',
   'query_count',
   'click_count',
   'unique_domains',
@@ -37,7 +38,7 @@ export async function GET() {
     supabase.from('task_sessions').select('*'),
     supabase.from('queries').select('session_id, task_id, query_text, timestamp').order('timestamp', { ascending: true }),
     supabase.from('clicks').select('session_id, task_id, domain, rank'),
-    supabase.from('answers').select('session_id, task_id, answer_text'),
+    supabase.from('answers').select('session_id, task_id, answer_text, timestamp'),
     supabase.from('interventions').select('session_id, task_id, was_shown'),
   ])
 

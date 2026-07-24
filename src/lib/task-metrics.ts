@@ -40,6 +40,7 @@ export interface AnswerRow {
   session_id: string
   task_id: string | null
   answer_text: string
+  timestamp: string
 }
 
 export interface TaskMetricRow {
@@ -50,6 +51,10 @@ export interface TaskMetricRow {
   task_start_time: string
   task_end_time: string | null
   time_on_task_s: number | null
+  // Sekunden vom Task-Start bis zum Absenden der Antwort — separat von time_on_task_s,
+  // das erst mit task_end_time (Wechsel zur nächsten Task) endet und daher leicht
+  // abweichen kann. Null wenn keine Antwort abgegeben wurde.
+  answer_time_s: number | null
   query_count: number
   click_count: number
   unique_domains: number
@@ -87,6 +92,11 @@ export function computeTaskMetrics(
         ? (new Date(ts.task_end_time).getTime() - new Date(ts.task_start_time).getTime()) / 1000
         : null
 
+    const answer_time_s =
+      tAnswer != null
+        ? (new Date(tAnswer.timestamp).getTime() - new Date(ts.task_start_time).getTime()) / 1000
+        : null
+
     const top1_click_ratio =
       tClicks.length > 0 ? tClicks.filter((c) => c.rank === 1).length / tClicks.length : null
 
@@ -110,6 +120,7 @@ export function computeTaskMetrics(
       task_start_time: ts.task_start_time,
       task_end_time: ts.task_end_time,
       time_on_task_s,
+      answer_time_s,
       query_count: tQueries.length,
       click_count: tClicks.length,
       unique_domains: new Set(tClicks.map((c) => c.domain)).size,
@@ -129,6 +140,7 @@ export interface AggregatedSessionRow {
   n_tasks: number
   n_valid_tasks: number
   avg_time_on_task_s: number | null
+  avg_answer_time_s: number | null
   avg_query_count: number | null
   avg_click_count: number | null
   avg_unique_domains: number | null
@@ -155,6 +167,7 @@ export function computeAggregatedRows(
       n_tasks: rows.length,
       n_valid_tasks: rows.filter((r) => r.valid_task).length,
       avg_time_on_task_s: avgIgnoringNulls(rows.map((r) => r.time_on_task_s)),
+      avg_answer_time_s: avgIgnoringNulls(rows.map((r) => r.answer_time_s)),
       avg_query_count: avgIgnoringNulls(rows.map((r) => r.query_count)),
       avg_click_count: avgIgnoringNulls(rows.map((r) => r.click_count)),
       avg_unique_domains: avgIgnoringNulls(rows.map((r) => r.unique_domains)),

@@ -125,6 +125,15 @@ function computeStats(
       avgDwellSeconds: avg(
         clickRows.filter(c => ids.has(c.session_id) && c.dwell_time_seconds != null).map(c => c.dwell_time_seconds!)
       ),
+      avgAnswerTimeSec: avg(
+        taskSessionRows
+          .filter(t => ids.has(t.session_id))
+          .map(t => {
+            const a = answerRows.find(a => a.session_id === t.session_id && a.task_id === t.task_id)
+            return a ? (new Date(a.timestamp).getTime() - new Date(t.task_start_time).getTime()) / 1000 : null
+          })
+          .filter((s): s is number => s != null)
+      ),
       avgCancelsPerSession: cancelRows.filter(c => ids.has(c.session_id)).length / (sessionsInCondition.length || 1),
     }
   })
@@ -205,6 +214,7 @@ function StatsSection({
                 <th className="py-1 pr-3 font-medium">Ø Queries/Task</th>
                 <th className="py-1 pr-3 font-medium">Ø Klicks/Task</th>
                 <th className="py-1 pr-3 font-medium">Ø Dwell</th>
+                <th className="py-1 pr-3 font-medium">Ø Antwortzeit</th>
                 <th className="py-1 font-medium">Ø Abbrüche/Session</th>
               </tr>
             </thead>
@@ -222,6 +232,7 @@ function StatsSection({
                   <td className="py-1.5 pr-3 text-gray-700">{c.avgQueriesPerTask.toFixed(1)}</td>
                   <td className="py-1.5 pr-3 text-gray-700">{c.avgClicksPerTask.toFixed(1)}</td>
                   <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgDwellSeconds)}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgAnswerTimeSec)}</td>
                   <td className="py-1.5 text-gray-700">{c.avgCancelsPerSession.toFixed(2)}</td>
                 </tr>
               ))}
@@ -507,6 +518,11 @@ export default async function ResultsPage({
                       <div>
                         <p className="text-xs font-medium text-gray-500 mb-1">
                           Antwort {tCancels.length > 0 && <span className="text-amber-600">({tCancels.length}× abgebrochen zuvor)</span>}
+                          {tAnswer && ts?.task_start_time && (
+                            <span className="text-gray-400 font-normal">
+                              {' '}· nach {fmtSeconds((new Date(tAnswer.timestamp).getTime() - new Date(ts.task_start_time).getTime()) / 1000)}
+                            </span>
+                          )}
                         </p>
                         <p className="text-xs text-gray-700 bg-gray-50 rounded px-2 py-1">{tAnswer?.answer_text ?? '—'}</p>
                       </div>
