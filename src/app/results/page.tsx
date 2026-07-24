@@ -65,6 +65,13 @@ interface AnswerCancelRow {
   timestamp: string
 }
 
+interface AnswerOpenRow {
+  session_id: string
+  task_id: string | null
+  time_to_open_s: number
+  timestamp: string
+}
+
 const TRIGGER_TYPES: TriggerType[] = [
   'top3_bias',
   'query_stagnation',
@@ -94,6 +101,14 @@ function fmtSeconds(s: number | null) {
   return s < 60 ? `${s.toFixed(0)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
 }
 
+// A user can cancel and reopen the answer form, producing multiple answer_opens rows
+// per task — only the first reflects the initial decision time (what quick_decision checks).
+function firstAnswerOpen(rows: AnswerOpenRow[], sessionId: string, taskId: string) {
+  return rows
+    .filter(a => a.session_id === sessionId && a.task_id === taskId)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0]
+}
+
 function computeStats(
   sessionRows: SessionRow[],
   taskSessionRows: TaskSessionRow[],
@@ -101,7 +116,8 @@ function computeStats(
   clickRows: ClickRow[],
   interventionRows: InterventionRow[],
   cancelRows: AnswerCancelRow[],
-  answerRows: AnswerRow[]
+  answerRows: AnswerRow[],
+  answerOpenRows: AnswerOpenRow[]
 ) {
   const conditions = ['buddy', 'control'] as const
 
@@ -132,6 +148,12 @@ function computeStats(
             const a = answerRows.find(a => a.session_id === t.session_id && a.task_id === t.task_id)
             return a ? (new Date(a.timestamp).getTime() - new Date(t.task_start_time).getTime()) / 1000 : null
           })
+          .filter((s): s is number => s != null)
+      ),
+      avgTimeToAnswerOpenSec: avg(
+        taskSessionRows
+          .filter(t => ids.has(t.session_id))
+          .map(t => firstAnswerOpen(answerOpenRows, t.session_id, t.task_id)?.time_to_open_s)
           .filter((s): s is number => s != null)
       ),
       avgCancelsPerSession: cancelRows.filter(c => ids.has(c.session_id)).length / (sessionsInCondition.length || 1),
@@ -214,6 +236,7 @@ function StatsSection({
                 <th className="py-1 pr-3 font-medium">Ø Queries/Task</th>
                 <th className="py-1 pr-3 font-medium">Ø Klicks/Task</th>
                 <th className="py-1 pr-3 font-medium">Ø Dwell</th>
+                <th className="py-1 pr-3 font-medium">Ø bis Formular</th>
                 <th className="py-1 pr-3 font-medium">Ø Antwortzeit</th>
                 <th className="py-1 font-medium">Ø Abbrüche/Session</th>
               </tr>
@@ -232,6 +255,7 @@ function StatsSection({
                   <td className="py-1.5 pr-3 text-gray-700">{c.avgQueriesPerTask.toFixed(1)}</td>
                   <td className="py-1.5 pr-3 text-gray-700">{c.avgClicksPerTask.toFixed(1)}</td>
                   <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgDwellSeconds)}</td>
+                  <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgTimeToAnswerOpenSec)}</td>
                   <td className="py-1.5 pr-3 text-gray-700">{fmtSeconds(c.avgAnswerTimeSec)}</td>
                   <td className="py-1.5 text-gray-700">{c.avgCancelsPerSession.toFixed(2)}</td>
                 </tr>
@@ -322,7 +346,7 @@ export default async function ResultsPage({
 
   const supabase = createAdminSupabaseClient()
 
-  const [sessions, taskSessions, queries, clicks, answers, interventions, answerCancels] = await Promise.all([
+  const [sessions, taskSessions, queries, clicks, answers, interventions, answerCancels, answerOpens] = await Promise.all([
     supabase.from('sessions').select('*').order('start_time', { ascending: false }),
     supabase.from('task_sessions').select('*'),
     supabase.from('queries').select('*').order('timestamp', { ascending: true }),
@@ -330,9 +354,10 @@ export default async function ResultsPage({
     supabase.from('answers').select('*').order('timestamp', { ascending: true }),
     supabase.from('interventions').select('*').order('timestamp', { ascending: true }),
     supabase.from('answer_cancels').select('*').order('timestamp', { ascending: true }),
+    supabase.from('answer_opens').select('*').order('timestamp', { ascending: true }),
   ])
 
-  const err = sessions.error || taskSessions.error || queries.error || clicks.error || answers.error || interventions.error || answerCancels.error
+  const err = sessions.error || taskSessions.error || queries.error || clicks.error || answers.error || interventions.error || answerCancels.error || answerOpens.error
   if (err) {
     return (
       <div className="min-h-screen bg-gray-50 py-10 px-4">
@@ -350,6 +375,7 @@ export default async function ResultsPage({
   const answerRows = (answers.data ?? []) as AnswerRow[]
   const interventionRows = (interventions.data ?? []) as InterventionRow[]
   const cancelRows = (answerCancels.data ?? []) as AnswerCancelRow[]
+  const answerOpenRows = (answerOpens.data ?? []) as AnswerOpenRow[]
 
   // Numbered only among consented sessions, so "Teilnehmer N" lines up with the
   // participant count above — non-consented rows (bounces) get no number, just
@@ -410,7 +436,7 @@ export default async function ResultsPage({
 
         {sessionRows.length > 0 && (
           <StatsSection
-            stats={computeStats(cleanSessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows)}
+            stats={computeStats(cleanSessionRows, taskSessionRows, queryRows, clickRows, interventionRows, cancelRows, answerRows, answerOpenRows)}
             reloadedCount={reloadedCount}
             noConsentCount={noConsentCount}
           />
@@ -460,6 +486,7 @@ export default async function ResultsPage({
                   const tAnswer = answerRows.find(a => a.session_id === session.id && a.task_id === taskId)
                   const tInterventions = interventionRows.filter(iv => iv.session_id === session.id && iv.task_id === taskId)
                   const tCancels = cancelRows.filter(c => c.session_id === session.id && c.task_id === taskId)
+                  const tAnswerOpen = firstAnswerOpen(answerOpenRows, session.id, taskId)
 
                   return (
                     <div key={taskId} className="p-5 space-y-3">
@@ -518,9 +545,12 @@ export default async function ResultsPage({
                       <div>
                         <p className="text-xs font-medium text-gray-500 mb-1">
                           Antwort {tCancels.length > 0 && <span className="text-amber-600">({tCancels.length}× abgebrochen zuvor)</span>}
+                          {tAnswerOpen && (
+                            <span className="text-gray-400 font-normal"> · Formular geöffnet nach {fmtSeconds(tAnswerOpen.time_to_open_s)}</span>
+                          )}
                           {tAnswer && ts?.task_start_time && (
                             <span className="text-gray-400 font-normal">
-                              {' '}· nach {fmtSeconds((new Date(tAnswer.timestamp).getTime() - new Date(ts.task_start_time).getTime()) / 1000)}
+                              {' '}· abgeschickt nach {fmtSeconds((new Date(tAnswer.timestamp).getTime() - new Date(ts.task_start_time).getTime()) / 1000)}
                             </span>
                           )}
                         </p>

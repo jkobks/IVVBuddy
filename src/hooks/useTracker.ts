@@ -43,6 +43,13 @@ export function useTracker(sessionId: string, taskId: string, taskPosition: numb
     [sessionId, taskId, taskPosition]
   )
 
+  const trackAnswerOpen = useCallback(
+    (timeToOpenSeconds: number) => {
+      post({ type: 'answer_open', sessionId, taskId, taskPosition, timeToOpenSeconds, timestamp: new Date().toISOString() })
+    },
+    [sessionId, taskId, taskPosition]
+  )
+
   const trackAnswer = useCallback(
     (answerText: string) => {
       post({ type: 'answer', sessionId, taskId, taskPosition, answerText, timestamp: new Date().toISOString() })
@@ -70,5 +77,5 @@ export function useTracker(sessionId: string, taskId: string, taskPosition: numb
     post({ type: 'answer_cancel', sessionId, taskId, taskPosition, timestamp: new Date().toISOString() })
   }, [sessionId, taskId, taskPosition])
 
-  return { trackTaskStart, trackTaskEnd, trackQuery, trackClick, trackAnswer, trackAnswerCancel, trackIntervention }
+  return { trackTaskStart, trackTaskEnd, trackQuery, trackClick, trackAnswer, trackAnswerOpen, trackAnswerCancel, trackIntervention }
 }

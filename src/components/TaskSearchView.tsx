@@ -191,13 +191,15 @@ export function TaskSearchView({
       const dwell = (Date.now() - pendingClickRef.current.clickTime) / 1000
       flushPendingClick(dwell)
     }
-    const tooFast = Date.now() - taskStartTime.current < QUICK_DECISION_THRESHOLD_MS
+    const elapsedMs = Date.now() - taskStartTime.current
+    tracker.trackAnswerOpen(elapsedMs / 1000)
+    const tooFast = elapsedMs < QUICK_DECISION_THRESHOLD_MS
     const tooFewClicks = taskClickCount <= QUICK_DECISION_MAX_CLICKS
     if (tooFast || tooFewClicks) {
       enqueueTrigger('quick_decision')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskClickCount])
+  }, [taskClickCount, tracker])
 
   const handleAnswerCancel = useCallback(() => {
     tracker.trackAnswerCancel()

@@ -43,6 +43,12 @@ export interface AnswerRow {
   timestamp: string
 }
 
+export interface AnswerOpenRow {
+  session_id: string
+  task_id: string | null
+  time_to_open_s: number
+}
+
 export interface TaskMetricRow {
   session_id: string
   condition: string
@@ -55,6 +61,10 @@ export interface TaskMetricRow {
   // das erst mit task_end_time (Wechsel zur nächsten Task) endet und daher leicht
   // abweichen kann. Null wenn keine Antwort abgegeben wurde.
   answer_time_s: number | null
+  // Sekunden vom Task-Start bis zum ersten Klick auf "Antwort abgeben" (Formular öffnet
+  // sich, noch vor dem Eintippen) — dieselbe Zeitspanne, die den quick_decision-Trigger
+  // prüft. Null wenn das Formular nie geöffnet wurde.
+  time_to_answer_open_s: number | null
   query_count: number
   click_count: number
   unique_domains: number
@@ -75,7 +85,8 @@ export function computeTaskMetrics(
   queryRows: QueryRow[],
   clickRows: ClickRow[],
   interventionRows: InterventionRow[],
-  answerRows: AnswerRow[]
+  answerRows: AnswerRow[],
+  answerOpenRows: AnswerOpenRow[] = []
 ): TaskMetricRow[] {
   const conditionBySession = new Map(sessionRows.map((s) => [s.id, s.condition]))
 
@@ -86,6 +97,9 @@ export function computeTaskMetrics(
       (iv) => iv.session_id === ts.session_id && iv.task_id === ts.task_id
     )
     const tAnswer = answerRows.find((a) => a.session_id === ts.session_id && a.task_id === ts.task_id)
+    // First open only — a user may cancel and reopen the form; only the initial
+    // decision time is what quick_decision measures.
+    const tAnswerOpen = answerOpenRows.find((a) => a.session_id === ts.session_id && a.task_id === ts.task_id)
 
     const time_on_task_s =
       ts.task_end_time != null
@@ -121,6 +135,7 @@ export function computeTaskMetrics(
       task_end_time: ts.task_end_time,
       time_on_task_s,
       answer_time_s,
+      time_to_answer_open_s: tAnswerOpen?.time_to_open_s ?? null,
       query_count: tQueries.length,
       click_count: tClicks.length,
       unique_domains: new Set(tClicks.map((c) => c.domain)).size,
@@ -141,6 +156,7 @@ export interface AggregatedSessionRow {
   n_valid_tasks: number
   avg_time_on_task_s: number | null
   avg_answer_time_s: number | null
+  avg_time_to_answer_open_s: number | null
   avg_query_count: number | null
   avg_click_count: number | null
   avg_unique_domains: number | null
@@ -168,6 +184,7 @@ export function computeAggregatedRows(
       n_valid_tasks: rows.filter((r) => r.valid_task).length,
       avg_time_on_task_s: avgIgnoringNulls(rows.map((r) => r.time_on_task_s)),
       avg_answer_time_s: avgIgnoringNulls(rows.map((r) => r.answer_time_s)),
+      avg_time_to_answer_open_s: avgIgnoringNulls(rows.map((r) => r.time_to_answer_open_s)),
       avg_query_count: avgIgnoringNulls(rows.map((r) => r.query_count)),
       avg_click_count: avgIgnoringNulls(rows.map((r) => r.click_count)),
       avg_unique_domains: avgIgnoringNulls(rows.map((r) => r.unique_domains)),

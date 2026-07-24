@@ -13,6 +13,7 @@ const COLUMNS = [
   'n_valid_tasks',
   'avg_time_on_task_s',
   'avg_answer_time_s',
+  'avg_time_to_answer_open_s',
   'avg_query_count',
   'avg_click_count',
   'avg_unique_domains',
@@ -30,16 +31,17 @@ export async function GET() {
   }
 
   const supabase = createAdminSupabaseClient()
-  const [sessions, taskSessions, queries, clicks, answers, interventions] = await Promise.all([
+  const [sessions, taskSessions, queries, clicks, answers, interventions, answerOpens] = await Promise.all([
     supabase.from('sessions').select('id, condition, reloaded'),
     supabase.from('task_sessions').select('*'),
     supabase.from('queries').select('session_id, task_id, query_text, timestamp').order('timestamp', { ascending: true }),
     supabase.from('clicks').select('session_id, task_id, domain, rank'),
     supabase.from('answers').select('session_id, task_id, answer_text, timestamp'),
     supabase.from('interventions').select('session_id, task_id, was_shown'),
+    supabase.from('answer_opens').select('session_id, task_id, time_to_open_s').order('timestamp', { ascending: true }),
   ])
 
-  const err = sessions.error || taskSessions.error || queries.error || clicks.error || answers.error || interventions.error
+  const err = sessions.error || taskSessions.error || queries.error || clicks.error || answers.error || interventions.error || answerOpens.error
   if (err) {
     return Response.json({ error: err.message }, { status: 500 })
   }
@@ -51,7 +53,8 @@ export async function GET() {
     queries.data ?? [],
     clicks.data ?? [],
     interventions.data ?? [],
-    answers.data ?? []
+    answers.data ?? [],
+    answerOpens.data ?? []
   )
   const rows = computeAggregatedRows(sessionRows, taskMetricRows)
 
